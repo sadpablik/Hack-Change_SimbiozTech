@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://postgres:postgres@localhost:5432/hack_change"
     )
+    model_path: str = "models/sentiment_model"
+    batch_size: int = 32
 
 
 @lru_cache

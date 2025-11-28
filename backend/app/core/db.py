@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
+from app.services.ml_service import ml_service
 from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -29,6 +30,9 @@ async def check_database() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Загружаем ML-модель при старте приложения
+    await ml_service.load_model(settings.model_path)
+    # Проверяем подключение к БД
     await check_database()
     try:
         yield
