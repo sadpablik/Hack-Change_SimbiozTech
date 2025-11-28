@@ -47,3 +47,63 @@ class ValidationResponse(BaseModel):
     class_metrics: list[ClassMetrics] = Field(
         ..., description="Per-class detailed metrics"
     )
+
+
+class SessionInfo(BaseModel):
+    """Информация о сессии анализа."""
+
+    id: int = Field(..., description="ID сессии")
+    filename: str = Field(..., description="Имя файла")
+    created_at: str = Field(..., description="Дата создания (ISO format)")
+    texts_count: int = Field(..., description="Количество текстов в сессии")
+    avg_confidence: float | None = Field(None, description="Средняя уверенность модели")
+
+
+class SessionsListResponse(BaseModel):
+    """Ответ со списком сессий."""
+
+    sessions: list[SessionInfo] = Field(..., description="Список сессий")
+    total: int = Field(..., description="Общее количество сессий")
+    limit: int = Field(..., description="Лимит на страницу")
+    offset: int = Field(..., description="Смещение")
+
+
+class SessionStatsResponse(BaseModel):
+    """Статистика по сессии."""
+
+    session_id: int = Field(..., description="ID сессии")
+    filename: str = Field(..., description="Имя файла")
+    created_at: str = Field(..., description="Дата создания")
+    total_texts: int = Field(..., description="Общее количество текстов")
+    analyzed_texts: int = Field(
+        ..., description="Количество проанализированных текстов"
+    )
+    avg_confidence: float | None = Field(None, description="Средняя уверенность модели")
+    min_confidence: float | None = Field(None, description="Минимальная уверенность")
+    max_confidence: float | None = Field(None, description="Максимальная уверенность")
+    class_distribution: dict[int, int] = Field(
+        ..., description="Распределение по классам: {0: count, 1: count, 2: count}"
+    )
+    source_distribution: dict[str, int] | None = Field(
+        None, description="Распределение по источникам (если есть)"
+    )
+
+
+class TextAnalysisResult(BaseModel):
+    """Результат анализа текста для списка."""
+
+    id: int = Field(..., description="ID записи")
+    text: str = Field(..., description="Текст")
+    pred_label: int = Field(..., description="Предсказанный класс")
+    confidence: float = Field(..., description="Уверенность")
+    source: str | None = Field(None, description="Источник")
+    true_label: int | None = Field(None, description="Истинный класс")
+
+
+class ResultsListResponse(BaseModel):
+    """Ответ со списком результатов."""
+
+    results: list[TextAnalysisResult] = Field(..., description="Список результатов")
+    total: int = Field(..., description="Общее количество результатов")
+    limit: int = Field(..., description="Лимит на страницу")
+    offset: int = Field(..., description="Смещение")
