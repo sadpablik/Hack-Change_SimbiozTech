@@ -6,11 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-    },
+    host: '0.0.0.0',
+    // Proxy не нужен, так как используем прямой URL в API клиенте
+    // Но оставляем для возможности использования в будущем
   },
 })

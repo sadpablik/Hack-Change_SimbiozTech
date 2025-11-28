@@ -12,6 +12,8 @@ import type {
   TextAnalysisRequest,
 } from '../types';
 
+// API URL - для Docker и локальной разработки используется localhost:8000
+// так как браузер делает запросы с localhost:3000 к localhost:8000
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiClient {
