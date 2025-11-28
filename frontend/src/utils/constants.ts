@@ -3,7 +3,7 @@
 export const MAX_FILE_SIZE_MB = 10;
 export const PREVIEW_ROWS = 5;
 export const DEFAULT_PAGE_SIZE = 50;
-export const MAX_PAGE_SIZE = 500;
+export const MAX_PAGE_SIZE = 500; // Максимальный limit для API (ограничение бэкенда)
 
 export const CLASS_LABELS: Record<number, string> = {
   0: 'Негативный',

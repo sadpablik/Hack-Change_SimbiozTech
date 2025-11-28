@@ -37,12 +37,16 @@ export function ResultsTable({
       const response = await apiClient.getResults(sessionId, {
         ...filters,
         offset: currentPage * pageSize,
-        limit: pageSize,
+        limit: Math.min(pageSize, 500), // Ограничиваем максимум 500
       });
       setResults(response.results);
       setTotal(response.total);
     } catch (error) {
       console.error('Ошибка загрузки результатов:', error);
+      // Показываем понятное сообщение об ошибке
+      if (error instanceof Error) {
+        alert(`Ошибка загрузки результатов: ${error.message}`);
+      }
     } finally {
       setIsLoading(false);
     }

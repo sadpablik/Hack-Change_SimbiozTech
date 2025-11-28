@@ -32,13 +32,16 @@ export function AnalysisPage() {
 
     setIsLoading(true);
     try {
-      const response = await apiClient.getResults(Number(sessionId), { limit: 1000 });
+      // Используем максимальный допустимый limit (500)
+      const response = await apiClient.getResults(Number(sessionId), { limit: 500, offset: 0 });
       const uniqueSources = Array.from(
         new Set(response.results.map((r) => r.source).filter((s): s is string => s !== null))
       );
       setSources(uniqueSources);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка загрузки данных');
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка загрузки данных';
+      setError(errorMessage);
+      console.error('Ошибка загрузки источников:', err);
     } finally {
       setIsLoading(false);
     }
@@ -84,7 +87,12 @@ export function AnalysisPage() {
         </div>
       </div>
 
-      {error && <ErrorMessage message={error} onDismiss={() => setError(null)} />}
+      {error && (
+        <ErrorMessage
+          message={typeof error === 'string' ? error : 'Произошла ошибка при загрузке данных'}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       <FiltersPanel
         filters={filters}
