@@ -3,6 +3,10 @@ from logging.config import fileConfig
 from alembic import context
 from app.core.config import settings
 from app.models import Base
+from app.models.analysis import (  # Импортируем модели для Alembic
+    AnalysisSession,
+    TextAnalysis,
+)
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -40,16 +44,18 @@ def run_migrations_online() -> None:
     )
 
     async def do_run_migrations() -> None:
-        async with connectable.connect() as connection:
-            await connection.run_sync(
-                lambda sync_connection: context.configure(
+        async with connectable.begin() as connection:
+
+            def run_migrations(sync_connection):
+                context.configure(
                     connection=sync_connection,
                     target_metadata=target_metadata,
                     compare_type=True,
                 )
-            )
+                with context.begin_transaction():
+                    context.run_migrations()
 
-            await connection.run_sync(lambda sync_connection: context.run_migrations())
+            await connection.run_sync(run_migrations)
 
     import asyncio
 
