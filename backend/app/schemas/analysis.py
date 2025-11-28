@@ -1,49 +1,49 @@
-"""Pydantic-схемы для анализа тональности."""
+"""Pydantic schemas for sentiment analysis."""
 
 from pydantic import BaseModel, Field
 
 
 class TextAnalysisRequest(BaseModel):
-    """Запрос на анализ одного текста."""
+    """Single text analysis request."""
 
-    text: str = Field(..., description="Текст для анализа тональности")
+    text: str = Field(..., description="Text for sentiment analysis")
 
 
 class TextAnalysisResponse(BaseModel):
-    """Ответ с результатом анализа одного текста."""
+    """Single text analysis response."""
 
-    label: int = Field(..., description="Предсказанный класс (0, 1 или 2)", ge=0, le=2)
-    confidence: float = Field(..., description="Уверенность модели", ge=0.0, le=1.0)
+    label: int = Field(..., description="Predicted class (0, 1, or 2)", ge=0, le=2)
+    confidence: float = Field(..., description="Model confidence", ge=0.0, le=1.0)
 
 
 class CSVUploadResponse(BaseModel):
-    """Ответ на загрузку CSV файла."""
+    """CSV upload response."""
 
-    session_id: int = Field(..., description="ID сессии загрузки")
-    filename: str = Field(..., description="Имя загруженного файла")
-    rows_count: int = Field(..., description="Количество строк в CSV")
+    session_id: int = Field(..., description="Upload session ID")
+    filename: str = Field(..., description="Uploaded filename")
+    rows_count: int = Field(..., description="Number of rows in CSV")
 
 
 class BatchAnalysisResponse(BaseModel):
-    """Ответ на батч-обработку CSV."""
+    """Batch analysis response."""
 
-    session_id: int = Field(..., description="ID сессии")
-    processed_count: int = Field(..., description="Количество обработанных текстов")
+    session_id: int = Field(..., description="Session ID")
+    processed_count: int = Field(..., description="Number of processed texts")
 
 
 class ClassMetrics(BaseModel):
-    """Метрики для одного класса."""
+    """Metrics for a single class."""
 
-    class_label: int = Field(..., description="Класс (0, 1 или 2)", ge=0, le=2)
-    precision: float = Field(..., description="Precision для класса")
-    recall: float = Field(..., description="Recall для класса")
-    f1: float = Field(..., description="F1-score для класса")
+    class_label: int = Field(..., description="Class label (0, 1, or 2)", ge=0, le=2)
+    precision: float = Field(..., description="Precision for the class")
+    recall: float = Field(..., description="Recall for the class")
+    f1: float = Field(..., description="F1-score for the class")
 
 
 class ValidationResponse(BaseModel):
-    """Ответ с результатами валидации (macro-F1)."""
+    """Validation response with macro-F1 metric."""
 
-    macro_f1: float = Field(..., description="Macro-F1 метрика")
+    macro_f1: float = Field(..., description="Macro-F1 metric")
     class_metrics: list[ClassMetrics] = Field(
-        ..., description="Детальные метрики по классам"
+        ..., description="Per-class detailed metrics"
     )

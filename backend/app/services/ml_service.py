@@ -3,6 +3,8 @@
 import random
 from typing import Any
 
+from app.core.config import settings
+
 
 class MLService:
     """Сервис для предсказания тональности текста."""
@@ -10,17 +12,19 @@ class MLService:
     def __init__(self) -> None:
         """Инициализация сервиса."""
         self.model: Any = None
-        self._is_loaded = False
+        self._is_loaded: bool = False
 
-    async def load_model(self, model_path: str) -> None:
+    async def load_model(self, model_path: str | None = None) -> None:
         """
         Загружает ML-модель из указанного пути.
 
         Args:
             model_path: Путь к модели (пока не используется, заглушка)
+
+        Returns:
+            None
         """
-        # TODO: Загрузить реальную модель из model_path
-        # Пока используем заглушку
+        # TODO: Реализовать загрузку реальной модели
         self._is_loaded = True
 
     def predict(self, text: str) -> tuple[int, float]:
@@ -34,13 +38,15 @@ class MLService:
             Кортеж (label, confidence), где:
             - label: предсказанный класс (0, 1 или 2)
             - confidence: уверенность модели (0.0-1.0)
+
+        Raises:
+            RuntimeError: Если модель не загружена
         """
         if not self._is_loaded:
             raise RuntimeError("Модель не загружена. Вызовите load_model() сначала.")
 
-        # Заглушка: случайное предсказание с confidence ~0.7-0.9
-        label = random.randint(0, 2)
-        confidence = round(random.uniform(0.7, 0.9), 4)
+        label: int = random.randint(0, 2)
+        confidence: float = round(random.uniform(0.7, 0.9), 4)
         return label, confidence
 
     def predict_batch(self, texts: list[str]) -> list[tuple[int, float]]:
@@ -52,18 +58,16 @@ class MLService:
 
         Returns:
             Список кортежей (label, confidence) для каждого текста
+
+        Raises:
+            RuntimeError: Если модель не загружена
         """
         if not self._is_loaded:
             raise RuntimeError("Модель не загружена. Вызовите load_model() сначала.")
 
-        # Заглушка: случайные предсказания для каждого текста
-        results = []
-        for text in texts:
-            label = random.randint(0, 2)
-            confidence = round(random.uniform(0.7, 0.9), 4)
-            results.append((label, confidence))
-        return results
+        return [
+            (random.randint(0, 2), round(random.uniform(0.7, 0.9), 4)) for _ in texts
+        ]
 
 
-# Глобальный экземпляр сервиса
-ml_service = MLService()
+ml_service: MLService = MLService()

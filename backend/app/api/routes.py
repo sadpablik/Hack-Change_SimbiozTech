@@ -1,10 +1,14 @@
-from datetime import datetime
+"""API эндпоинты для анализа тональности."""
+
+import traceback
+from typing import Any
 
 import pandas as pd
 from app.core.db import get_session
 from app.models.analysis import AnalysisSession, TextAnalysis
 from app.schemas.analysis import (
     BatchAnalysisResponse,
+    ClassMetrics,
     CSVUploadResponse,
     TextAnalysisRequest,
     TextAnalysisResponse,
@@ -17,23 +21,54 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-router = APIRouter()
+router: APIRouter = APIRouter()
+
+
+async def get_session_or_404(session: AsyncSession, session_id: int) -> AnalysisSession:
+    """
+    Получает сессию анализа по ID или выбрасывает 404.
+
+    Args:
+        session: Сессия БД
+        session_id: ID сессии
+
+    Returns:
+        AnalysisSession: Сессия анализа
+
+    Raises:
+        HTTPException: Если сессия не найдена
+    """
+    result = await session.execute(
+        select(AnalysisSession).where(AnalysisSession.id == session_id)
+    )
+    analysis_session: AnalysisSession | None = result.scalar_one_or_none()
+    if not analysis_session:
+        raise HTTPException(
+            status_code=404, detail=f"Сессия с ID {session_id} не найдена"
+        )
+    return analysis_session
 
 
 @router.get("/health", tags=["health"])
 async def health_check(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    """Проверяет доступность API и подключения к базе данных."""
+    """
+    Проверяет доступность API и подключения к базе данных.
+
+    Args:
+        session: Сессия БД
+
+    Returns:
+        Словарь со статусом API и БД
+    """
     await session.execute(text("SELECT 1"))
     return {"status": "ok", "database": "up"}
 
 
 @router.post("/upload", response_model=CSVUploadResponse, tags=["analysis"])
 async def upload_csv(
-    file: UploadFile = File(
-        ..., description="CSV файл с колонкой 'text' (опционально: 'source', 'label')"
-    ),
+    file: UploadFile,
     session: AsyncSession = Depends(get_session),
 ) -> CSVUploadResponse:
     """
@@ -41,39 +76,58 @@ async def upload_csv(
 
     CSV должен содержать обязательную колонку 'text'.
     Опциональные колонки: 'source', 'label' (true_label).
+
+    Args:
+        file: Загруженный CSV файл
+        session: Сессия БД
+
+    Returns:
+        CSVUploadResponse: Информация о созданной сессии
+
+    Raises:
+        HTTPException: При ошибках обработки файла или сохранения данных
     """
-    # Парсим CSV
-    data = await csv_service.parse_csv(file)
+    try:
+        data: list[dict[str, Any]] = await csv_service.parse_csv(file)
 
-    # Создаем сессию
-    analysis_session = AnalysisSession(
-        filename=file.filename or "unknown.csv",
-        created_at=datetime.utcnow(),
-    )
-    session.add(analysis_session)
-    await session.flush()  # Получаем ID сессии
-
-    # Сохраняем данные в БД
-    for row in data:
-        text_analysis = TextAnalysis(
-            session_id=analysis_session.id,
-            text=str(row["text"]),
-            pred_label=0,  # Пока не предсказано
-            confidence=0.0,  # Пока не предсказано
-            source=row.get("source"),
-            true_label=int(row["label"])
-            if "label" in row and pd.notna(row.get("label"))
-            else None,
+        analysis_session: AnalysisSession = AnalysisSession(
+            filename=file.filename or "unknown.csv"
         )
-        session.add(text_analysis)
+        session.add(analysis_session)
+        await session.flush()
 
-    await session.commit()
+        text_analyses: list[TextAnalysis] = [
+            TextAnalysis(
+                session_id=analysis_session.id,
+                text=str(row["text"]),
+                pred_label=0,
+                confidence=0.0,
+                source=row.get("source"),
+                true_label=(
+                    int(row["label"])
+                    if "label" in row and pd.notna(row.get("label"))
+                    else None
+                ),
+            )
+            for row in data
+        ]
+        session.add_all(text_analyses)
+        await session.commit()
 
-    return CSVUploadResponse(
-        session_id=analysis_session.id,
-        filename=file.filename or "unknown.csv",
-        rows_count=len(data),
-    )
+        return CSVUploadResponse(
+            session_id=analysis_session.id,
+            filename=file.filename or "unknown.csv",
+            rows_count=len(data),
+        )
+    except HTTPException:
+        await session.rollback()
+        raise
+    except Exception as e:
+        await session.rollback()
+        error_detail: str = (
+            f"Ошибка при сохранении данных: {str(e)}\n{traceback.format_exc()}"
+        )
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 @router.post("/analyze", response_model=TextAnalysisResponse, tags=["analysis"])
@@ -83,10 +137,15 @@ async def analyze_text(
     """
     Анализирует тональность одного текста.
 
-    Возвращает предсказанный класс (0, 1 или 2) и уверенность модели.
-    """
-    label, confidence = ml_service.predict(request.text)
+    Args:
+        request: Запрос с текстом для анализа
 
+    Returns:
+        TextAnalysisResponse: Предсказанный класс и уверенность модели
+    """
+    label: int
+    confidence: float
+    label, confidence = ml_service.predict(request.text)
     return TextAnalysisResponse(label=label, confidence=confidence)
 
 
@@ -99,43 +158,39 @@ async def batch_analyze(
     Выполняет батч-обработку всех текстов из загруженного CSV.
 
     Берет все тексты из сессии, выполняет предсказания и сохраняет результаты в БД.
+
+    Args:
+        session_id: ID сессии загрузки CSV
+        session: Сессия БД
+
+    Returns:
+        BatchAnalysisResponse: Результаты батч-обработки
+
+    Raises:
+        HTTPException: Если сессия не найдена или нет текстов для анализа
     """
-    # Проверяем существование сессии
-    result = await session.execute(
-        select(AnalysisSession).where(AnalysisSession.id == session_id)
-    )
-    analysis_session = result.scalar_one_or_none()
+    await get_session_or_404(session, session_id)
 
-    if not analysis_session:
-        raise HTTPException(
-            status_code=404, detail=f"Сессия с ID {session_id} не найдена"
-        )
-
-    # Получаем все тексты из сессии
     result = await session.execute(
         select(TextAnalysis).where(TextAnalysis.session_id == session_id)
     )
-    text_analyses = result.scalars().all()
+    text_analyses: list[TextAnalysis] = result.scalars().all()
 
     if not text_analyses:
         raise HTTPException(status_code=400, detail="В сессии нет текстов для анализа")
 
-    # Подготавливаем тексты для батч-обработки
-    texts = [ta.text for ta in text_analyses]
+    texts: list[str] = [ta.text for ta in text_analyses]
+    predictions: list[tuple[int, float]] = ml_service.predict_batch(texts)
 
-    # Выполняем батч-предсказания
-    predictions = ml_service.predict_batch(texts)
-
-    # Обновляем результаты в БД
-    processed_count = 0
     for text_analysis, (label, confidence) in zip(text_analyses, predictions):
         text_analysis.pred_label = label
         text_analysis.confidence = confidence
-        processed_count += 1
 
     await session.commit()
 
-    return BatchAnalysisResponse(session_id=session_id, processed_count=processed_count)
+    return BatchAnalysisResponse(
+        session_id=session_id, processed_count=len(text_analyses)
+    )
 
 
 @router.post("/validate", response_model=ValidationResponse, tags=["analysis"])
@@ -147,19 +202,19 @@ async def validate_session(
     Рассчитывает macro-F1 метрику для сессии.
 
     Использует true_label и pred_label из БД для расчета метрик по классам.
+
+    Args:
+        session_id: ID сессии для валидации
+        session: Сессия БД
+
+    Returns:
+        ValidationResponse: Результаты валидации с macro-F1 и метриками по классам
+
+    Raises:
+        HTTPException: Если сессия не найдена или нет данных для валидации
     """
-    # Проверяем существование сессии
-    result = await session.execute(
-        select(AnalysisSession).where(AnalysisSession.id == session_id)
-    )
-    analysis_session = result.scalar_one_or_none()
+    await get_session_or_404(session, session_id)
 
-    if not analysis_session:
-        raise HTTPException(
-            status_code=404, detail=f"Сессия с ID {session_id} не найдена"
-        )
-
-    # Получаем все записи с true_label и pred_label
     result = await session.execute(
         select(TextAnalysis).where(
             TextAnalysis.session_id == session_id,
@@ -167,7 +222,7 @@ async def validate_session(
             TextAnalysis.pred_label.isnot(None),
         )
     )
-    text_analyses = result.scalars().all()
+    text_analyses: list[TextAnalysis] = result.scalars().all()
 
     if not text_analyses:
         raise HTTPException(
@@ -175,24 +230,17 @@ async def validate_session(
             detail="В сессии нет записей с true_label и pred_label для валидации",
         )
 
-    # Извлекаем метки
-    y_true = [ta.true_label for ta in text_analyses if ta.true_label is not None]
-    y_pred = [ta.pred_label for ta in text_analyses if ta.pred_label is not None]
+    y_true: list[int] = [ta.true_label for ta in text_analyses]
+    y_pred: list[int] = [ta.pred_label for ta in text_analyses]
 
     if len(y_true) != len(y_pred):
         raise HTTPException(status_code=400, detail="Несоответствие количества меток")
 
-    # Рассчитываем метрики
-    metrics = metrics_service.calculate_macro_f1(y_true, y_pred)
-
-    # Формируем ответ
-    from app.schemas.analysis import ClassMetrics
-
-    class_metrics = [ClassMetrics(**cm) for cm in metrics["class_metrics"]]
+    metrics: dict[str, Any] = metrics_service.calculate_macro_f1(y_true, y_pred)
 
     return ValidationResponse(
         macro_f1=metrics["macro_f1"],
-        class_metrics=class_metrics,
+        class_metrics=[ClassMetrics(**cm) for cm in metrics["class_metrics"]],
     )
 
 
@@ -204,47 +252,42 @@ async def export_csv(
     """
     Экспортирует результаты анализа сессии в CSV формат.
 
-    Возвращает CSV строку с колонками: text, pred_label, confidence, source (если есть), true_label (если есть).
+    Возвращает CSV строку с колонками: text, pred_label, confidence,
+    source (если есть), true_label (если есть).
+
+    Args:
+        session_id: ID сессии для экспорта
+        session: Сессия БД
+
+    Returns:
+        Словарь с ключом 'csv' и CSV строкой в качестве значения
+
+    Raises:
+        HTTPException: Если сессия не найдена или нет данных для экспорта
     """
-    # Проверяем существование сессии
-    result = await session.execute(
-        select(AnalysisSession).where(AnalysisSession.id == session_id)
-    )
-    analysis_session = result.scalar_one_or_none()
+    await get_session_or_404(session, session_id)
 
-    if not analysis_session:
-        raise HTTPException(
-            status_code=404, detail=f"Сессия с ID {session_id} не найдена"
-        )
-
-    # Получаем все записи анализа
     result = await session.execute(
         select(TextAnalysis).where(TextAnalysis.session_id == session_id)
     )
-    text_analyses = result.scalars().all()
+    text_analyses: list[TextAnalysis] = result.scalars().all()
 
     if not text_analyses:
         raise HTTPException(status_code=400, detail="В сессии нет данных для экспорта")
 
-    # Формируем данные для экспорта
-    export_data = []
-    for ta in text_analyses:
-        row = {
+    export_data: list[dict[str, Any]] = [
+        {
             "text": ta.text,
             "pred_label": ta.pred_label,
             "confidence": ta.confidence,
+            **({"source": ta.source} if ta.source else {}),
+            **({"true_label": ta.true_label} if ta.true_label is not None else {}),
         }
-        if ta.source:
-            row["source"] = ta.source
-        if ta.true_label is not None:
-            row["true_label"] = ta.true_label
-        export_data.append(row)
+        for ta in text_analyses
+    ]
 
-    # Экспортируем в CSV
-    csv_content = csv_service.export_to_csv(export_data)
-
-    return {"csv": csv_content}
+    return {"csv": csv_service.export_to_csv(export_data)}
 
 
-api_router = APIRouter()
+api_router: APIRouter = APIRouter()
 api_router.include_router(router, prefix="")

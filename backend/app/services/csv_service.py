@@ -1,6 +1,5 @@
 """Сервис для работы с CSV файлами."""
 
-import csv
 import io
 from typing import Any
 
@@ -10,6 +9,9 @@ from fastapi import HTTPException, UploadFile
 
 class CSVService:
     """Сервис для парсинга и экспорта CSV файлов."""
+
+    REQUIRED_COLUMN: str = "text"
+    OPTIONAL_COLUMNS: set[str] = {"source", "label"}
 
     @staticmethod
     async def parse_csv(file: UploadFile) -> list[dict[str, Any]]:
@@ -26,31 +28,23 @@ class CSVService:
             HTTPException: Если файл некорректен или отсутствует обязательная колонка 'text'
         """
         try:
-            # Читаем содержимое файла
-            contents = await file.read()
-            file.seek(
-                0
-            )  # Возвращаем указатель в начало для возможного повторного чтения
+            contents: bytes = await file.read()
+            df: pd.DataFrame = pd.read_csv(io.BytesIO(contents))
 
-            # Парсим CSV с помощью pandas
-            df = pd.read_csv(io.BytesIO(contents))
-
-            # Проверяем наличие обязательной колонки 'text'
-            if "text" not in df.columns:
+            if CSVService.REQUIRED_COLUMN not in df.columns:
                 raise HTTPException(
                     status_code=400,
-                    detail="CSV файл должен содержать колонку 'text'",
+                    detail=f"CSV файл должен содержать колонку '{CSVService.REQUIRED_COLUMN}'",
                 )
 
-            # Конвертируем в список словарей
-            data = df.to_dict("records")
+            data: list[dict[str, Any]] = df.to_dict("records")
 
-            # Валидация: проверяем, что все тексты не пустые
-            for i, row in enumerate(data):
-                if not row.get("text") or pd.isna(row.get("text")):
+            for i, row in enumerate(data, start=1):
+                text_value: Any = row.get(CSVService.REQUIRED_COLUMN)
+                if not text_value or pd.isna(text_value):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Строка {i + 1}: поле 'text' не может быть пустым",
+                        detail=f"Строка {i}: поле '{CSVService.REQUIRED_COLUMN}' не может быть пустым",
                     )
 
             return data
@@ -61,6 +55,8 @@ class CSVService:
             raise HTTPException(
                 status_code=400, detail=f"Ошибка парсинга CSV: {str(e)}"
             )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=400, detail=f"Ошибка обработки файла: {str(e)}"
@@ -80,24 +76,16 @@ class CSVService:
         if not data:
             return ""
 
-        # Создаем DataFrame
-        df = pd.DataFrame(data)
+        df: pd.DataFrame = pd.DataFrame(data)
+        column_order: list[str] = ["text", "pred_label", "confidence"]
+        column_order.extend(
+            col for col in ["source", "true_label"] if col in df.columns
+        )
 
-        # Упорядочиваем колонки: text, pred_label, confidence, source (если есть), true_label (если есть)
-        columns_order = ["text", "pred_label", "confidence"]
-        if "source" in df.columns:
-            columns_order.append("source")
-        if "true_label" in df.columns:
-            columns_order.append("true_label")
-
-        # Оставляем только существующие колонки
-        columns_order = [col for col in columns_order if col in df.columns]
-        df = df[columns_order]
-
-        # Конвертируем в CSV строку
-        output = io.StringIO()
+        df = df[[col for col in column_order if col in df.columns]]
+        output: io.StringIO = io.StringIO()
         df.to_csv(output, index=False, encoding="utf-8")
         return output.getvalue()
 
 
-csv_service = CSVService()
+csv_service: CSVService = CSVService()

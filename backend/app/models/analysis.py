@@ -1,4 +1,4 @@
-"""SQLAlchemy модели для анализа тональности."""
+"""SQLAlchemy models for sentiment analysis."""
 
 from datetime import datetime
 
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class AnalysisSession(Base):
-    """Сессия загрузки CSV файла."""
+    """CSV upload session."""
 
     __tablename__ = "analysis_sessions"
 
@@ -18,14 +18,13 @@ class AnalysisSession(Base):
     )
     filename: Mapped[str] = mapped_column(String, nullable=False)
 
-    # Связь с результатами анализа
     analyses: Mapped[list["TextAnalysis"]] = relationship(
         "TextAnalysis", back_populates="session", cascade="all, delete-orphan"
     )
 
 
 class TextAnalysis(Base):
-    """Результаты анализа одного текста."""
+    """Single text analysis result."""
 
     __tablename__ = "text_analyses"
 
@@ -37,18 +36,11 @@ class TextAnalysis(Base):
         index=True,
     )
     text: Mapped[str] = mapped_column(String, nullable=False)
-    pred_label: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )  # Предсказанный класс
-    confidence: Mapped[float] = mapped_column(Float, nullable=False)  # Уверенность
-    source: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )  # Источник (если есть в CSV)
-    true_label: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )  # Истинный класс (если есть в CSV)
+    pred_label: Mapped[int] = mapped_column(Integer, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
+    true_label: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Связь с сессией
     session: Mapped["AnalysisSession"] = relationship(
         "AnalysisSession", back_populates="analyses"
     )

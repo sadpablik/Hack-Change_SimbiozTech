@@ -9,6 +9,9 @@ from sklearn.metrics import precision_recall_fscore_support
 class MetricsService:
     """Сервис для расчета метрик качества модели."""
 
+    CLASS_LABELS: list[int] = [0, 1, 2]
+    DECIMAL_PLACES: int = 4
+
     @staticmethod
     def calculate_macro_f1(y_true: list[int], y_pred: list[int]) -> dict[str, Any]:
         """
@@ -30,38 +33,42 @@ class MetricsService:
             - macro_f1: общая macro-F1 метрика
             - class_metrics: список метрик для каждого класса
         """
-        y_true_array = np.array(y_true)
-        y_pred_array = np.array(y_pred)
+        y_true_array: np.ndarray = np.array(y_true)
+        y_pred_array: np.ndarray = np.array(y_pred)
 
-        # Используем sklearn для расчета метрик
-        precision, recall, f1, support = precision_recall_fscore_support(
-            y_true_array, y_pred_array, labels=[0, 1, 2], average=None, zero_division=0
+        precision: np.ndarray
+        recall: np.ndarray
+        f1: np.ndarray
+        _: np.ndarray
+        precision, recall, f1, _ = precision_recall_fscore_support(
+            y_true_array,
+            y_pred_array,
+            labels=MetricsService.CLASS_LABELS,
+            average=None,
+            zero_division=0,
         )
 
-        # Рассчитываем macro-F1 как среднее F1 по всем классам
-        macro_f1 = float(np.mean(f1))
+        macro_f1: float = float(np.nanmean(f1))
 
-        # Формируем детальные метрики по классам
-        class_metrics = []
-        for i, label in enumerate([0, 1, 2]):
-            # Обработка edge cases: если Precision + Recall = 0, F1 = 0
-            precision_i = float(precision[i]) if not np.isnan(precision[i]) else 0.0
-            recall_i = float(recall[i]) if not np.isnan(recall[i]) else 0.0
-            f1_i = float(f1[i]) if not np.isnan(f1[i]) else 0.0
-
-            class_metrics.append(
-                {
-                    "class_label": label,
-                    "precision": round(precision_i, 4),
-                    "recall": round(recall_i, 4),
-                    "f1": round(f1_i, 4),
-                }
-            )
+        class_metrics: list[dict[str, Any]] = [
+            {
+                "class_label": label,
+                "precision": round(
+                    float(np.nan_to_num(precision[i])),
+                    MetricsService.DECIMAL_PLACES,
+                ),
+                "recall": round(
+                    float(np.nan_to_num(recall[i])), MetricsService.DECIMAL_PLACES
+                ),
+                "f1": round(float(np.nan_to_num(f1[i])), MetricsService.DECIMAL_PLACES),
+            }
+            for i, label in enumerate(MetricsService.CLASS_LABELS)
+        ]
 
         return {
-            "macro_f1": round(macro_f1, 4),
+            "macro_f1": round(macro_f1, MetricsService.DECIMAL_PLACES),
             "class_metrics": class_metrics,
         }
 
 
-metrics_service = MetricsService()
+metrics_service: MetricsService = MetricsService()
