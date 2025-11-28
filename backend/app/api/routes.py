@@ -578,5 +578,41 @@ async def export_json(
     return {"data": export_data, "count": len(export_data)}
 
 
+@router.put("/results/{result_id}", tags=["analysis"])
+async def update_result(
+    result_id: int,
+    true_label: int = Query(..., ge=0, le=2, description="Истинная метка класса"),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    """
+    Обновляет истинную метку для результата анализа.
+
+    Args:
+        result_id: ID результата анализа
+        true_label: Истинная метка класса (0, 1, или 2)
+        session: Сессия БД
+
+    Returns:
+        Словарь с сообщением об успехе
+
+    Raises:
+        HTTPException: Если результат не найден
+    """
+    result = await session.execute(
+        select(TextAnalysis).where(TextAnalysis.id == result_id)
+    )
+    text_analysis: TextAnalysis | None = result.scalar_one_or_none()
+
+    if not text_analysis:
+        raise HTTPException(
+            status_code=404, detail=f"Результат с ID {result_id} не найден"
+        )
+
+    text_analysis.true_label = true_label
+    await session.commit()
+
+    return {"message": "Метка успешно обновлена"}
+
+
 api_router: APIRouter = APIRouter()
 api_router.include_router(router, prefix="")
