@@ -1,24 +1,56 @@
 # Общие
 .DS_Store
+Thumbs.db
 *.log
-*.pyc
+*.tmp
+*.swp
+*.swo
+*.bak
+*.orig
+
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+# IDE и редакторы
 .idea/
 .vscode/
-.__pycache__
-# Python envs
+.vs/
+
+# Виртуальные окружения
 .venv/
 venv/
 ENV/
+env/
+.python-version
 
-# Тестовые артефакты
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Env files
+# Секреты и переменные окружения
 .env
+.env.*
+*.env
 *.env.local
+
+# Сборки и артефакты
+build/
+dist/
+site/
+node_modules/
+coverage/
+
+# Бэкенд-специфичное
+alembic/versions_backup/
+backend/.env
 
 # Docker
 **/docker-compose.override.yml
+**/.docker/
