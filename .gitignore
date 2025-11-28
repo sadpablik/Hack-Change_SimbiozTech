@@ -1,0 +1,24 @@
+# Общие
+.DS_Store
+*.log
+*.pyc
+__pycache__/
+.idea/
+.vscode/
+.__pycache__
+# Python envs
+.venv/
+venv/
+ENV/
+
+# Тестовые артефакты
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Env files
+.env
+*.env.local
+
+# Docker
+**/docker-compose.override.yml
