@@ -30,6 +30,14 @@ export interface ClassMetrics {
 export interface ValidationResponse {
   macro_f1: number;
   class_metrics: ClassMetrics[];
+  validation_id?: string | null;
+}
+
+export interface ValidationItem {
+  validation_id: string;
+  created_at: string;
+  rows_count: number;
+  macro_f1: number;
 }
 
 export interface SessionInfo {

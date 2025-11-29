@@ -43,13 +43,16 @@ class MinIOService:
             raise RuntimeError(f"Ошибка проверки bucket: {e}")
 
     @classmethod
-    def save_file(cls, object_name: str, content: str | bytes) -> str:
+    def save_file(
+        cls, object_name: str, content: str | bytes, content_type: str | None = None
+    ) -> str:
         """
         Сохраняет файл в MinIO.
 
         Args:
             object_name: Имя объекта в bucket
             content: Содержимое файла (строка или bytes)
+            content_type: MIME тип файла (автоопределяется по расширению если не указан)
 
         Returns:
             str: Имя объекта
@@ -60,6 +63,14 @@ class MinIOService:
         else:
             content_bytes = content
 
+        if content_type is None:
+            if object_name.endswith(".json"):
+                content_type = "application/json"
+            elif object_name.endswith(".csv"):
+                content_type = "text/csv"
+            else:
+                content_type = "application/octet-stream"
+
         content_stream = io.BytesIO(content_bytes)
         content_length = len(content_bytes)
 
@@ -69,7 +80,7 @@ class MinIOService:
                 object_name,
                 content_stream,
                 content_length,
-                content_type="text/csv",
+                content_type=content_type,
             )
             return object_name
         except S3Error as e:

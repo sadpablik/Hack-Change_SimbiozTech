@@ -47,6 +47,7 @@ class ValidationResponse(BaseModel):
     class_metrics: list[ClassMetrics] = Field(
         ..., description="Per-class detailed metrics"
     )
+    validation_id: str | None = Field(None, description="ID сохраненной валидации")
 
 
 class SessionInfo(BaseModel):

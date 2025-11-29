@@ -137,9 +137,40 @@ export function ValidationPage() {
       {metrics && (
         <div className="space-y-8">
           <div className="card">
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
-              Результаты валидации
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                Результаты валидации
+              </h2>
+              {metrics.validation_id && (
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    ID: {metrics.validation_id.substring(0, 8)}...
+                  </span>
+                  <button
+                    onClick={async () => {
+                      if (!metrics.validation_id) return;
+                      try {
+                        const blob = await apiClient.downloadValidation(metrics.validation_id);
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `validation_${metrics.validation_id}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        showToast('Результаты валидации успешно скачаны', 'success');
+                      } catch (err) {
+                        showToast('Ошибка при скачивании результатов', 'error');
+                      }
+                    }}
+                    className="btn-primary text-sm"
+                  >
+                    Скачать JSON
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg mb-6">
               <div className="text-center">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Macro-F1</p>
@@ -155,7 +186,7 @@ export function ValidationPage() {
             <div className="card">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
                 Confusion Matrix
-          </h2>
+              </h2>
               <ConfusionMatrix matrix={confusionMatrix} />
             </div>
           )}

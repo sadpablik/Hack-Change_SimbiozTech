@@ -1,5 +1,6 @@
 """API эндпоинты для анализа тональности."""
 
+import json
 import traceback
 from datetime import datetime
 from typing import Any
@@ -718,9 +719,19 @@ async def validate_csv(file: UploadFile) -> ValidationResponse:
 
         metrics = metrics_service.calculate_macro_f1(y_true, y_pred)
 
+        validation_data = {
+            "macro_f1": metrics["macro_f1"],
+            "class_metrics": metrics["class_metrics"],
+            "rows_count": len(y_true),
+            "skipped_rows": len(skipped_rows),
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        validation_id = storage_service.save_validation(validation_data)
+
         return ValidationResponse(
             macro_f1=metrics["macro_f1"],
             class_metrics=[ClassMetrics(**cm) for cm in metrics["class_metrics"]],
+            validation_id=validation_id,
         )
     except HTTPException:
         raise
@@ -768,6 +779,42 @@ async def list_predictions() -> dict[str, Any]:
         "predictions": predictions,
         "total": len(predictions),
     }
+
+
+@router.get("/validations/list", tags=["analysis"])
+async def list_validations() -> dict[str, Any]:
+    """Возвращает список всех сохраненных валидаций."""
+    validations = storage_service.list_validations()
+    return {
+        "validations": validations,
+        "total": len(validations),
+    }
+
+
+@router.get("/download/validation/{validation_id}", tags=["analysis"])
+async def download_validation(
+    validation_id: str = Path(..., description="ID валидации"),
+) -> Response:
+    """Скачивает результаты валидации в формате JSON."""
+    validation_data = storage_service.get_validation(validation_id)
+    if validation_data is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Валидация с ID {validation_id} не найдена",
+                }
+            },
+        )
+    json_content = json.dumps(validation_data, ensure_ascii=False, indent=2)
+    return Response(
+        content=json_content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="validation_{validation_id}.json"'
+        },
+    )
 
 
 @router.post("/preprocess", response_model=PreprocessResponse, tags=["analysis"])

@@ -152,6 +152,29 @@ class ApiClient {
     return response.data;
   }
 
+  async listValidations(): Promise<{
+    validations: Array<{
+      validation_id: string;
+      created_at: string;
+      rows_count: number;
+      macro_f1: number;
+    }>;
+    total: number;
+  }> {
+    const response = await this.client.get('/api/validations/list');
+    return response.data;
+  }
+
+  async downloadValidation(validationId: string): Promise<Blob> {
+    const response = await this.client.get(
+      `/api/download/validation/${validationId}`,
+      {
+        responseType: 'blob',
+      }
+    );
+    return response.data;
+  }
+
   async preprocessText(text: string): Promise<PreprocessResponse> {
     const response = await this.client.post<PreprocessResponse>(
       '/api/preprocess',

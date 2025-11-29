@@ -1,5 +1,6 @@
 """Сервис для хранения предсказаний в MinIO."""
 
+import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -60,11 +61,57 @@ class StorageService:
         return sorted(result, key=lambda x: x["created_at"], reverse=True)
 
     @classmethod
+    def save_validation(cls, validation_data: dict[str, Any]) -> str:
+        """Сохраняет результаты валидации в MinIO и возвращает validation_id."""
+        validation_id = str(uuid.uuid4())
+        json_content = json.dumps(validation_data, ensure_ascii=False, indent=2)
+        object_name = f"validations/{validation_id}.json"
+        minio_service.save_file(object_name, json_content)
+        return validation_id
+
+    @classmethod
+    def get_validation(cls, validation_id: str) -> dict[str, Any] | None:
+        """Получает результаты валидации из MinIO."""
+        object_name = f"validations/{validation_id}.json"
+        content = minio_service.get_file(object_name)
+        if content is None:
+            return None
+        try:
+            return json.loads(content.decode("utf-8"))
+        except json.JSONDecodeError:
+            return None
+
+    @classmethod
+    def list_validations(cls) -> list[dict[str, Any]]:
+        """Возвращает список всех валидаций с метаданными из MinIO."""
+        files = minio_service.list_files(prefix="validations/")
+        result = []
+        for file_info in files:
+            object_name = file_info["object_name"]
+            validation_id = object_name.replace("validations/", "").replace(".json", "")
+            validation_data = cls.get_validation(validation_id)
+            rows_count = validation_data.get("rows_count", 0) if validation_data else 0
+            result.append(
+                {
+                    "validation_id": validation_id,
+                    "created_at": file_info.get(
+                        "last_modified", datetime.utcnow().isoformat()
+                    ),
+                    "rows_count": rows_count,
+                    "macro_f1": validation_data.get("macro_f1", 0.0)
+                    if validation_data
+                    else 0.0,
+                }
+            )
+        return sorted(result, key=lambda x: x["created_at"], reverse=True)
+
+    @classmethod
     def cleanup_old(cls, max_age_hours: int = 24) -> None:
         """Удаляет старые файлы из MinIO."""
         files = minio_service.list_files(prefix="predictions/")
+        validation_files = minio_service.list_files(prefix="validations/")
         now = datetime.utcnow()
-        for file_info in files:
+        for file_info in files + validation_files:
             if file_info.get("last_modified"):
                 try:
                     last_modified = datetime.fromisoformat(file_info["last_modified"])
