@@ -1,54 +1,170 @@
-"""Сервис для работы с ML-моделью анализа тональности."""
+"""Сервис для работы с ML моделью через HTTP API."""
 
-import random
-from typing import Any
+import asyncio
+import httpx
+from app.core.config import settings
 
-import numpy as np
+MAX_RETRIES = 3
+RETRY_DELAY = 2.0
 
+def get_optimal_batch_size(total_texts: int) -> int:
+    """
+    Определяет оптимальный размер батча для отправки в ML сервис.
+    
+    Важно: ML сервис сам разобьет батч на оптимальные чанки для inference
+    (512 для GPU, 128 для CPU). Здесь мы определяем размер HTTP батча.
+    
+    Для больших файлов используем большие батчи, чтобы минимизировать
+    количество HTTP запросов и сетевые задержки.
+    """
+    if total_texts <= 200:
+        return total_texts  # Обрабатываем все сразу
+    elif total_texts <= 1000:
+        return 500
+    elif total_texts <= 10000:
+        return 2000
+    elif total_texts <= 50000:
+        return 5000
+    else:
+        # Для 60000 строк: отправляем батчи по 10000
+        # ML сервис разобьет каждый на оптимальные чанки для inference
+        return 10000
 
-class MLService:
-    def __init__(self) -> None:
-        self.model: Any = None
-        self._is_loaded: bool = False
-        self.model_version: str = "stub-1.0.0"
-
-    async def load_model(self, model_path: str | None = None) -> None:
-        self._is_loaded = True
-
-    def predict(self, text: str) -> tuple[int, float]:
-        if not self._is_loaded:
-            raise RuntimeError("Модель не загружена")
-        label: int = random.randint(0, 2)
-        confidence: float = round(random.uniform(0.7, 0.9), 4)
-        return label, confidence
-
-    def predict_with_proba(self, text: str) -> tuple[int, list[float]]:
-        if not self._is_loaded:
-            raise RuntimeError("Модель не загружена")
-        proba = np.random.dirichlet([1, 1, 1])
-        proba = [round(float(p), 4) for p in proba]
-        label: int = int(np.argmax(proba))
-        return label, proba
-
-    def predict_batch(self, texts: list[str]) -> list[tuple[int, float]]:
-        if not self._is_loaded:
-            raise RuntimeError("Модель не загружена")
-        return [
-            (random.randint(0, 2), round(random.uniform(0.7, 0.9), 4)) for _ in texts
-        ]
-
-    def predict_batch_with_proba(
-        self, texts: list[str]
-    ) -> list[tuple[int, list[float]]]:
-        if not self._is_loaded:
-            raise RuntimeError("Модель не загружена")
-        results: list[tuple[int, list[float]]] = []
-        for _ in texts:
-            proba = np.random.dirichlet([1, 1, 1])
-            proba = [round(float(p), 4) for p in proba]
-            label: int = int(np.argmax(proba))
-            results.append((label, proba))
-        return results
+def get_optimal_concurrency(total_texts: int) -> int:
+    """Определяет оптимальное количество параллельных батчей."""
+    if total_texts <= 200:
+        return 1  # Один батч - не нужна параллельность
+    elif total_texts <= 1000:
+        return 2  # 2 батча - обрабатываем параллельно
+    elif total_texts <= 10000:
+        return 5  # 5 параллельных батчей
+    elif total_texts <= 50000:
+        return 8  # 8 параллельных батчей для больших файлов
+    else:
+        return 10  # Максимум 10 параллельных батчей для очень больших файлов
 
 
-ml_service: MLService = MLService()
+async def analyze_single_text(text: str) -> dict:
+    """Анализирует тональность одного текста через ML сервис."""
+    timeout = httpx.Timeout(30.0, connect=10.0, read=30.0, write=10.0, pool=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await client.post(
+                    f"{settings.ml_service_url}/predict",
+                    json={"text": text}
+                )
+                response.raise_for_status()
+                result = response.json()
+                return {
+                    "label": result["label"],
+                    "label_name": result["label_name"],
+                    "confidence": result["confidence"],
+                    "probabilities": result["probabilities"]
+                }
+            except (httpx.RequestError, httpx.ReadError, httpx.ConnectError) as e:
+                if attempt == MAX_RETRIES - 1:
+                    raise Exception(f"ML service connection error after {MAX_RETRIES} attempts: {str(e)}")
+                await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+            except httpx.HTTPStatusError as e:
+                raise Exception(f"ML service error: {e.response.status_code} - {e.response.text}")
+
+
+async def _process_batch(client: httpx.AsyncClient, texts_batch: list[str], batch_num: int = 0) -> list[dict]:
+    """Обрабатывает один батч текстов с повторными попытками и оптимизированными таймаутами."""
+    batch_size = len(texts_batch)
+    # Увеличиваем таймаут для больших батчей: ~0.2 секунды на текст (180ms среднее время), минимум 60 секунд
+    # Для 10000 текстов: 10000 * 0.2 = 2000 секунд = ~33 минуты
+    timeout_seconds = max(60.0, batch_size * 0.2)
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            # Используем более длинные таймауты для больших батчей
+            timeout = httpx.Timeout(
+                timeout_seconds, 
+                connect=60.0,  # Увеличен connect timeout
+                read=timeout_seconds, 
+                write=60.0, 
+                pool=30.0
+            )
+            response = await client.post(
+                f"{settings.ml_service_url}/predict-batch",
+                json={"texts": texts_batch},
+                timeout=timeout
+            )
+            response.raise_for_status()
+            result = response.json()
+            return [
+                {
+                    "label": r["label"],
+                    "label_name": r["label_name"],
+                    "confidence": r["confidence"],
+                    "probabilities": r["probabilities"]
+                }
+                for r in result["results"]
+            ]
+        except (httpx.RequestError, httpx.ReadError, httpx.ConnectError, httpx.TimeoutException) as e:
+            if attempt == MAX_RETRIES - 1:
+                raise Exception(f"ML service connection error for batch {batch_num} after {MAX_RETRIES} attempts: {str(e)}")
+            await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+        except httpx.HTTPStatusError as e:
+            raise Exception(f"ML service error: {e.response.status_code} - {e.response.text}")
+
+
+async def analyze_batch_texts(texts: list) -> list:
+    """Анализирует тональность нескольких текстов через ML сервис с адаптивным батчингом и максимальной параллельностью."""
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not texts:
+        return []
+    
+    total_texts = len(texts)
+    batch_size = get_optimal_batch_size(total_texts)
+    max_concurrent = get_optimal_concurrency(total_texts)
+    
+    start_time = time.time()
+    logger.info(f"[ML_SERVICE] Processing {total_texts} texts with batch_size={batch_size}, max_concurrent={max_concurrent}")
+    
+    if total_texts <= batch_size:
+        timeout = httpx.Timeout(600.0, connect=30.0, read=600.0, write=30.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            result = await _process_batch(client, texts)
+            elapsed = time.time() - start_time
+            logger.info(f"[ML_SERVICE] Completed {total_texts} texts in {elapsed:.2f}s ({elapsed/total_texts*1000:.2f}ms per text)")
+            return result
+    
+    batches = [texts[i:i + batch_size] for i in range(0, total_texts, batch_size)]
+    num_batches = len(batches)
+    
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def process_with_semaphore(client: httpx.AsyncClient, batch: list[str], batch_num: int) -> list[dict]:
+        async with semaphore:
+            return await _process_batch(client, batch, batch_num)
+    
+    # Увеличиваем таймауты для очень больших файлов (до 2 часов)
+    max_timeout = max(3600.0, total_texts * 0.1)  # ~0.1 сек на текст, минимум 1 час
+    timeout = httpx.Timeout(max_timeout, connect=120.0, read=max_timeout, write=120.0, pool=100.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        tasks = [process_with_semaphore(client, batch, i) for i, batch in enumerate(batches)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    final_results = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            raise Exception(f"Error processing batch {i+1}/{num_batches}: {str(result)}")
+        final_results.extend(result)
+    
+    elapsed = time.time() - start_time
+    logger.info(f"[ML_SERVICE] Completed {total_texts} texts in {num_batches} batches in {elapsed:.2f}s ({elapsed/total_texts*1000:.2f}ms per text)")
+    
+    return final_results
+
+
+def get_sentiment_stats(texts: list) -> dict:
+    """Get statistics about sentiments in a batch"""
+    # Эта функция больше не используется напрямую, но оставлена для совместимости
+    # В реальности нужно сделать её async
+    raise NotImplementedError("Use analyze_batch_texts instead")

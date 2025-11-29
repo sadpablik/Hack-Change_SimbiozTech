@@ -1,10 +1,21 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from './ThemeToggle';
 
 export function Header() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (location.pathname === '/') {
+      window.location.reload();
+    } else {
+      navigate('/');
+      setTimeout(() => window.location.reload(), 100);
+    }
+  };
 
   return (
     <header className="glass-effect sticky top-0 z-50 border-b border-gray-200/50 dark:border-gray-700/50">
@@ -13,7 +24,8 @@ export function Header() {
           <div className="flex items-center space-x-10">
             <Link
               to="/"
-              className="flex items-center space-x-2 group"
+              onClick={handleLogoClick}
+              className="flex items-center space-x-2 group cursor-pointer"
             >
               <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
                 <span className="text-white font-bold text-xl">A</span>

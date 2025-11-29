@@ -14,9 +14,9 @@ export function ConfusionMatrix({ matrix }: ConfusionMatrixProps) {
 
   const getLabelName = (label: number) => {
     switch (label) {
-      case 0: return 'Отрицательный';
-      case 1: return 'Нейтральный';
-      case 2: return 'Положительный';
+      case 0: return 'Нейтральная';
+      case 1: return 'Положительная';
+      case 2: return 'Негативная';
       default: return `Класс ${label}`;
     }
   };
@@ -33,13 +33,13 @@ export function ConfusionMatrix({ matrix }: ConfusionMatrixProps) {
                 Реально / Предсказано
               </th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                0 - Отрицательный
+                0 - Нейтральная
               </th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                1 - Нейтральный
+                1 - Положительная
               </th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                2 - Положительный
+                2 - Негативная
               </th>
             </tr>
           </thead>

@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.services.minio_service import minio_service
-from app.services.ml_service import ml_service
 from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -54,7 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     Управляет жизненным циклом приложения.
 
-    Загружает ML-модель при старте и проверяет подключение к БД.
+    Проверяет подключение к БД при старте.
 
     Args:
         app: Экземпляр FastAPI приложения
@@ -62,7 +61,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Yields:
         None
     """
-    await ml_service.load_model(settings.model_path)
     await check_database()
     try:
         yield

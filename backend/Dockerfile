@@ -20,4 +20,4 @@ RUN mkdir -p models
 
 EXPOSE 8000
 
-CMD sh -c "echo 'Waiting for database...' && sleep 5 && echo 'Running migrations...' && alembic upgrade head && echo 'Starting application...' && uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 300 --timeout-graceful-shutdown 300"
+CMD sh -c "echo 'Waiting for database...' && sleep 5 && echo 'Running migrations...' && alembic upgrade head && echo 'Starting application...' && uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 600 --timeout-graceful-shutdown 600"

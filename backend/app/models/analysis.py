@@ -36,8 +36,8 @@ class TextAnalysis(Base):
         index=True,
     )
     text: Mapped[str] = mapped_column(String, nullable=False)
-    pred_label: Mapped[int] = mapped_column(Integer, nullable=False)
-    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    pred_label: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str | None] = mapped_column(String, nullable=True)
     true_label: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

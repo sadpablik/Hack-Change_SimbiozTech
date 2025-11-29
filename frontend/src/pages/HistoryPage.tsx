@@ -9,6 +9,7 @@ interface PredictionItem {
   prediction_id: string;
   created_at: string;
   rows_count: number;
+  processing_time?: number;
 }
 
 interface ValidationItem {
@@ -16,6 +17,7 @@ interface ValidationItem {
   created_at: string;
   rows_count: number;
   macro_f1: number;
+  processing_time?: number;
 }
 
 export function HistoryPage() {
@@ -39,13 +41,15 @@ export function HistoryPage() {
         apiClient.listPredictions(),
         apiClient.listValidations(),
       ]);
-      setPredictions(predictionsData.predictions);
-      setValidations(validationsData.validations);
+      setPredictions(predictionsData?.predictions || []);
+      setValidations(validationsData?.validations || []);
     } catch (err) {
       console.error('Ошибка загрузки истории:', err);
       const errorMessage = err instanceof Error ? err.message : 'Ошибка загрузки истории анализов';
       setError(errorMessage);
       showToast(errorMessage, 'error');
+      setPredictions([]);
+      setValidations([]);
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +121,7 @@ export function HistoryPage() {
     );
   }
 
-  if (error) {
+  if (error && predictions.length === 0 && validations.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="card">
@@ -126,11 +130,15 @@ export function HistoryPage() {
             <button onClick={loadHistory} className="btn-primary">
               Попробовать снова
             </button>
+            <button onClick={() => navigate('/')} className="btn-secondary ml-2">
+              На главную
+            </button>
           </div>
         </div>
       </div>
     );
   }
+
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -201,6 +209,9 @@ export function HistoryPage() {
                       Количество строк
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Время обработки
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       ID предсказания
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -216,6 +227,15 @@ export function HistoryPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
                         {pred.rows_count.toLocaleString('ru-RU')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                        {pred.processing_time ? (
+                          <span className="flex items-center gap-1">
+                            ⏱️ {pred.processing_time} сек
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">
                         {pred.prediction_id.substring(0, 8)}...
@@ -280,6 +300,9 @@ export function HistoryPage() {
                       Macro-F1
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Время обработки
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       ID валидации
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -304,6 +327,15 @@ export function HistoryPage() {
                         }`}>
                           {val.macro_f1.toFixed(4)}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                        {val.processing_time ? (
+                          <span className="flex items-center gap-1">
+                            ⏱️ {val.processing_time} сек
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">
                         {val.validation_id.substring(0, 8)}...

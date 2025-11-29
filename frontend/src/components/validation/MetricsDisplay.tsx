@@ -7,18 +7,18 @@ interface MetricsDisplayProps {
 export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
   const getLabelName = (label: number) => {
     switch (label) {
-      case 0: return 'Отрицательный';
-      case 1: return 'Нейтральный';
-      case 2: return 'Положительный';
+      case 0: return 'Нейтральная';
+      case 1: return 'Положительная';
+      case 2: return 'Негативная';
       default: return `Класс ${label}`;
     }
   };
 
   const getLabelColor = (label: number) => {
     switch (label) {
-      case 0: return 'text-red-600 dark:text-red-400';
-      case 1: return 'text-yellow-600 dark:text-yellow-400';
-      case 2: return 'text-green-600 dark:text-green-400';
+      case 0: return 'text-gray-600 dark:text-gray-400';
+      case 1: return 'text-green-600 dark:text-green-400';
+      case 2: return 'text-red-600 dark:text-red-400';
       default: return 'text-gray-600 dark:text-gray-400';
     }
   };

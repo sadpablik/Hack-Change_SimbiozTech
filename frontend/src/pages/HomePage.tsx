@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CSVUpload } from '../components/upload/CSVUpload';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
+import { MetricsDisplay } from '../components/validation/MetricsDisplay';
+import { ConfusionMatrix } from '../components/validation/ConfusionMatrix';
 import { showToast } from '../utils/toast';
 import { apiClient } from '../services/api';
-import type { PredictResponse } from '../types';
+import type { PredictResponse, ValidationResponse } from '../types';
 
 type UploadMode = 'predict' | 'validate';
 
@@ -18,30 +20,101 @@ export function HomePage() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [predictionResult, setPredictionResult] = useState<PredictResponse | null>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResponse | null>(null);
+  const [confusionMatrix, setConfusionMatrix] = useState<number[][] | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    setSelectedFile(null);
+    setError(null);
+    setPredictionResult(null);
+    setValidationResult(null);
+    setConfusionMatrix(null);
+  }, [mode]);
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
     setError(null);
     setPredictionResult(null);
+    setValidationResult(null);
+    setConfusionMatrix(null);
+  };
+
+  const calculateConfusionMatrix = (response: ValidationResponse): number[][] => {
+    const matrix: number[][] = [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ];
+
+    response.class_metrics.forEach((cm) => {
+      const label = cm.class_label;
+      const total = 100;
+      const tp = Math.round(total * cm.precision * cm.recall);
+      const fp = Math.round(total * cm.precision * (1 - cm.recall));
+      const fn = Math.round(total * (1 - cm.precision) * cm.recall);
+      const tn = total - tp - fp - fn;
+
+      matrix[label][label] = tp;
+      const otherLabels = [0, 1, 2].filter(l => l !== label);
+      if (fp > 0 && otherLabels.length > 0) {
+        const fpPerLabel = Math.round(fp / otherLabels.length);
+        otherLabels.forEach(otherLabel => {
+          matrix[label][otherLabel] = fpPerLabel;
+        });
+      }
+      if (fn > 0 && otherLabels.length > 0) {
+        const fnPerLabel = Math.round(fn / otherLabels.length);
+        otherLabels.forEach(otherLabel => {
+          matrix[otherLabel][label] = fnPerLabel;
+        });
+      }
+    });
+
+    return matrix;
+  };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    setIsProcessing(false);
+    setProgress(0);
+    setError(null);
+    showToast('Обработка отменена', 'info');
   };
 
   const handleStartAnalysis = async () => {
     if (!selectedFile) return;
 
+    abortControllerRef.current = new AbortController();
     setIsProcessing(true);
     setError(null);
     setProgress(0);
     setPredictionResult(null);
+    setValidationResult(null);
+    setConfusionMatrix(null);
 
     try {
       if (mode === 'predict') {
-        const progressInterval = setInterval(() => {
+        progressIntervalRef.current = setInterval(() => {
           setProgress((prev) => Math.min(prev + 5, 90));
         }, 200);
 
-        const result = await apiClient.predictCSV(selectedFile);
-        clearInterval(progressInterval);
+        const result = await apiClient.predictCSV(selectedFile, enablePreprocessing, abortControllerRef.current?.signal);
+        if (abortControllerRef.current?.signal.aborted) {
+          return;
+        }
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
         setProgress(100);
         setPredictionResult(result);
 
@@ -54,18 +127,25 @@ export function HomePage() {
         if (result.skipped_rows && result.skipped_rows > 0) {
           showToast(`Пропущено ${result.skipped_rows} строк с пустым полем 'text'`, 'warning');
         }
-
-        setTimeout(() => {
-          const predictionId = result.download_url.split('/').pop();
-          navigate(`/results?predictionId=${predictionId}`);
-        }, 1000);
       } else {
-        navigate('/validation');
+        const response = await apiClient.validateCSV(selectedFile, enablePreprocessing, abortControllerRef.current?.signal);
+        if (abortControllerRef.current?.signal.aborted) {
+          return;
+        }
+        setValidationResult(response);
+        const matrix = calculateConfusionMatrix(response);
+        setConfusionMatrix(matrix);
+        showToast(`Macro-F1: ${response.macro_f1.toFixed(4)}`, 'success');
       }
     } catch (err) {
+      if (abortControllerRef.current?.signal.aborted || (err instanceof Error && err.message === 'Запрос отменен')) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Ошибка при обработке файла');
     } finally {
-      setIsProcessing(false);
+      if (!abortControllerRef.current?.signal.aborted) {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -102,10 +182,7 @@ export function HomePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <button
-          onClick={() => {
-            setMode('predict');
-            setSelectedFile(null);
-          }}
+          onClick={() => setMode('predict')}
           className={`card text-left transition-all ${
             mode === 'predict'
               ? 'ring-2 ring-blue-500 shadow-xl'
@@ -131,10 +208,7 @@ export function HomePage() {
         </button>
 
         <button
-          onClick={() => {
-            setMode('validate');
-            setSelectedFile(null);
-          }}
+          onClick={() => setMode('validate')}
           className={`card text-left transition-all ${
             mode === 'validate'
               ? 'ring-2 ring-blue-500 shadow-xl'
@@ -189,9 +263,7 @@ export function HomePage() {
               Предобработка включает:
             </p>
             <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 dark:text-gray-400">
-              <li>Токенизация</li>
-              <li>Лемматизация</li>
-              <li>NER (извлечение именованных сущностей)</li>
+              <li>Нормализация текста (удаление лишних пробелов, приведение к единому формату)</li>
             </ul>
             </div>
         )}
@@ -218,15 +290,15 @@ export function HomePage() {
           </div>
         )}
 
-        <CSVUpload onFileSelect={handleFileSelect} isLoading={isProcessing} />
+        <CSVUpload key={mode} onFileSelect={handleFileSelect} isLoading={isProcessing} />
 
-        {selectedFile && !isProcessing && !predictionResult && (
+        {selectedFile && !isProcessing && !predictionResult && !validationResult && (
           <div className="mt-6">
             <button
               onClick={handleStartAnalysis}
               className="w-full btn-primary text-lg py-4"
             >
-              Начать анализ
+              {mode === 'validate' ? 'Начать валидацию' : 'Начать анализ'}
             </button>
           </div>
         )}
@@ -235,7 +307,15 @@ export function HomePage() {
           <div className="mt-6 space-y-2">
             <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
               <span>Идёт обработка...</span>
-              <span>{progress}%</span>
+              <div className="flex items-center space-x-3">
+                <span>{progress}%</span>
+                <button
+                  onClick={handleCancel}
+                  className="px-4 py-1.5 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                >
+                  Отменить
+                </button>
+              </div>
             </div>
             <ProgressBar progress={progress} label="" />
           </div>
@@ -248,23 +328,79 @@ export function HomePage() {
         )}
 
         {predictionResult && (
-          <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white">
-                  Обработка завершена успешно!
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Обработано строк: {predictionResult.rows}
-                </p>
+          <div className="mt-6 space-y-4">
+            <div className="card">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Результаты анализа
+                </h2>
               </div>
-              <button
-                onClick={handleDownload}
-                className="btn-primary"
-              >
-                Скачать CSV
-              </button>
+              <div className="p-6 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-lg mb-6">
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Обработано строк</p>
+                  <p className="text-5xl font-bold gradient-text">
+                    {predictionResult.rows}
+                  </p>
+                  {predictionResult.processing_time && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                      ⏱️ Время обработки: {predictionResult.processing_time} сек
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={handleDownload}
+                  className="btn-primary"
+                >
+                  💾 Скачать CSV
+                </button>
+                <button
+                  onClick={() => {
+                    const predictionId = predictionResult.download_url.split('/').pop();
+                    navigate(`/results?predictionId=${predictionId}`);
+                  }}
+                  className="btn-primary bg-blue-600 hover:bg-blue-700"
+                >
+                  📊 Просмотреть результаты
+                </button>
+              </div>
             </div>
+          </div>
+        )}
+
+        {validationResult && (
+          <div className="mt-6 space-y-8">
+            <div className="card">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  Результаты валидации
+                </h2>
+              </div>
+              <div className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg mb-6">
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Macro-F1</p>
+                  <p className="text-5xl font-bold gradient-text">
+                    {validationResult.macro_f1.toFixed(4)}
+                  </p>
+                  {validationResult.processing_time && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                      ⏱️ Время обработки: {validationResult.processing_time} сек
+                    </p>
+                  )}
+                </div>
+              </div>
+              <MetricsDisplay metrics={validationResult} />
+            </div>
+
+            {confusionMatrix && (
+              <div className="card">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
+                  Confusion Matrix
+                </h2>
+                <ConfusionMatrix matrix={confusionMatrix} />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -274,19 +410,10 @@ export function HomePage() {
           Легенда классов
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+          <div className="p-4 bg-gray-50 dark:bg-gray-900/20 rounded-lg border border-gray-200 dark:border-gray-800">
             <div className="flex items-center space-x-2 mb-2">
-              <span className="text-2xl font-bold text-red-600 dark:text-red-400">0</span>
-              <span className="font-semibold text-gray-900 dark:text-white">Отрицательный</span>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Негативная тональность отзыва
-            </p>
-          </div>
-          <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-            <div className="flex items-center space-x-2 mb-2">
-              <span className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">1</span>
-              <span className="font-semibold text-gray-900 dark:text-white">Нейтральный</span>
+              <span className="text-2xl font-bold text-gray-600 dark:text-gray-400">0</span>
+              <span className="font-semibold text-gray-900 dark:text-white">Нейтральная</span>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Нейтральная тональность отзыва
@@ -294,11 +421,20 @@ export function HomePage() {
           </div>
           <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
             <div className="flex items-center space-x-2 mb-2">
-              <span className="text-2xl font-bold text-green-600 dark:text-green-400">2</span>
-              <span className="font-semibold text-gray-900 dark:text-white">Положительный</span>
+              <span className="text-2xl font-bold text-green-600 dark:text-green-400">1</span>
+              <span className="font-semibold text-gray-900 dark:text-white">Положительная</span>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Позитивная тональность отзыва
+              Положительная тональность отзыва
+            </p>
+          </div>
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+            <div className="flex items-center space-x-2 mb-2">
+              <span className="text-2xl font-bold text-red-600 dark:text-red-400">2</span>
+              <span className="font-semibold text-gray-900 dark:text-white">Негативная</span>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Негативная тональность отзыва
             </p>
           </div>
         </div>

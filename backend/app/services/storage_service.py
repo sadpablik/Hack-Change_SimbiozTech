@@ -11,12 +11,28 @@ from app.services.minio_service import minio_service
 
 class StorageService:
     @classmethod
-    def save_predictions(cls, predictions: list[dict[str, Any]]) -> str:
+    def save_predictions(cls, predictions: list[dict[str, Any]], processing_time: float | None = None) -> str:
         """Сохраняет предсказания в MinIO и возвращает prediction_id."""
         prediction_id = str(uuid.uuid4())
+        # Оптимизация: для больших файлов используем streaming запись
         csv_content = csv_service.export_to_csv(predictions, include_proba=True)
         object_name = f"predictions/{prediction_id}.csv"
         minio_service.save_file(object_name, csv_content)
+        
+        if processing_time is not None:
+            metadata = {
+                "prediction_id": prediction_id,
+                "processing_time": processing_time,
+                "rows_count": len(predictions),
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            metadata_object_name = f"predictions/{prediction_id}.meta.json"
+            metadata_content = json.dumps(metadata, ensure_ascii=False, indent=2)
+            try:
+                minio_service.save_file(metadata_object_name, metadata_content)
+            except Exception:
+                pass
+        
         return prediction_id
 
     @classmethod
@@ -40,22 +56,38 @@ class StorageService:
         result = []
         for file_info in files:
             object_name = file_info["object_name"]
+            if not object_name.endswith(".csv"):
+                continue
             prediction_id = object_name.replace("predictions/", "").replace(".csv", "")
             rows_count = 0
-            if file_info.get("size", 0) > 0:
-                csv_content = minio_service.get_file(object_name)
-                if csv_content:
-                    lines = csv_content.decode("utf-8").split("\n")
-                    rows_count = max(
-                        0, len([line for line in lines if line.strip()]) - 1
-                    )
+            processing_time = None
+            
+            metadata_object_name = f"predictions/{prediction_id}.meta.json"
+            metadata_content = minio_service.get_file(metadata_object_name)
+            if metadata_content:
+                try:
+                    metadata = json.loads(metadata_content.decode("utf-8"))
+                    rows_count = metadata.get("rows_count", 0)
+                    processing_time = metadata.get("processing_time")
+                    created_at = metadata.get("created_at", file_info.get("last_modified", datetime.utcnow().isoformat()))
+                except (json.JSONDecodeError, KeyError):
+                    created_at = file_info.get("last_modified", datetime.utcnow().isoformat())
+            else:
+                created_at = file_info.get("last_modified", datetime.utcnow().isoformat())
+                if file_info.get("size", 0) > 0:
+                    csv_content = minio_service.get_file(object_name)
+                    if csv_content:
+                        lines = csv_content.decode("utf-8").split("\n")
+                        rows_count = max(
+                            0, len([line for line in lines if line.strip()]) - 1
+                        )
+            
             result.append(
                 {
                     "prediction_id": prediction_id,
-                    "created_at": file_info.get(
-                        "last_modified", datetime.utcnow().isoformat()
-                    ),
+                    "created_at": created_at,
                     "rows_count": rows_count,
+                    "processing_time": processing_time,
                 }
             )
         return sorted(result, key=lambda x: x["created_at"], reverse=True)
@@ -66,7 +98,13 @@ class StorageService:
         validation_id = str(uuid.uuid4())
         json_content = json.dumps(validation_data, ensure_ascii=False, indent=2)
         object_name = f"validations/{validation_id}.json"
-        minio_service.save_file(object_name, json_content)
+        try:
+            minio_service.save_file(object_name, json_content)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error saving validation to MinIO: {str(e)}", exc_info=True)
+            # Продолжаем работу даже если не удалось сохранить в MinIO
         return validation_id
 
     @classmethod
@@ -91,16 +129,20 @@ class StorageService:
             validation_id = object_name.replace("validations/", "").replace(".json", "")
             validation_data = cls.get_validation(validation_id)
             rows_count = validation_data.get("rows_count", 0) if validation_data else 0
+            processing_time = validation_data.get("processing_time") if validation_data else None
             result.append(
                 {
                     "validation_id": validation_id,
-                    "created_at": file_info.get(
+                    "created_at": validation_data.get("created_at", file_info.get(
+                        "last_modified", datetime.utcnow().isoformat()
+                    )) if validation_data else file_info.get(
                         "last_modified", datetime.utcnow().isoformat()
                     ),
                     "rows_count": rows_count,
                     "macro_f1": validation_data.get("macro_f1", 0.0)
                     if validation_data
                     else 0.0,
+                    "processing_time": processing_time,
                 }
             )
         return sorted(result, key=lambda x: x["created_at"], reverse=True)

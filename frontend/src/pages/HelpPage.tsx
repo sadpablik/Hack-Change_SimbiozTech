@@ -47,10 +47,15 @@ export function HelpPage() {
             </div>
             <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded">
               <p className="font-mono text-sm">
-                text,source,label<br />
-                "Отличный продукт!",review,2<br />
-                "Не понравилось",review,0<br />
-                "Нормально",review,1
+                text,src,label<br />
+                "Отличный продукт!",review,1<br />
+                "Не понравилось",review,2<br />
+                "Нормально",review,0
+              </p>
+            </div>
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                <strong>Примечание:</strong> В выходном CSV файле будет добавлена колонка <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">pred_label</code> с предсказанной меткой (0, 1, или 2) и опционально <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">pred_proba</code> с вероятностями для каждого класса.
               </p>
             </div>
             <div className="mt-4 space-y-2">
@@ -96,9 +101,10 @@ export function HelpPage() {
               <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 ml-2">
                 <li>Выберите режим "Предсказание" на главной странице</li>
                 <li>Загрузите CSV файл с колонкой <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">text</code> (опционально: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">src</code>)</li>
+                <li>При необходимости включите/отключите предобработку текста (нормализация)</li>
                 <li>Проверьте preview первых строк файла</li>
                 <li>Нажмите "Начать анализ" для обработки всех текстов</li>
-                <li>Просмотрите результаты: предсказанные классы и вероятности</li>
+                <li>Просмотрите результаты: предсказанные классы, вероятности и время обработки</li>
                 <li>Используйте фильтры и поиск для навигации по результатам</li>
                 <li>При необходимости скорректируйте метки вручную через выпадающий список</li>
                 <li>Скачайте результаты в CSV или экспортируйте корректировки</li>
@@ -111,8 +117,9 @@ export function HelpPage() {
               <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 ml-2">
                 <li>Выберите режим "Валидация" на главной странице</li>
                 <li>Загрузите CSV файл с колонками <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">text</code> и <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">label</code></li>
+                <li>При необходимости включите/отключите предобработку текста</li>
                 <li>Нажмите "Начать валидацию"</li>
-                <li>Просмотрите метрики: Macro-F1, Precision, Recall по классам</li>
+                <li>Просмотрите метрики: Macro-F1, Precision, Recall по классам и время обработки</li>
                 <li>Изучите матрицу ошибок (Confusion Matrix)</li>
               </ol>
             </div>
@@ -163,22 +170,39 @@ export function HelpPage() {
           </h2>
           <div className="space-y-2 text-gray-700 dark:text-gray-300">
             <div className="flex items-center space-x-2">
-              <span className="w-4 h-4 bg-red-500 rounded"></span>
-              <span>
-                <strong>0 - Негативный</strong>: отрицательная тональность
-              </span>
-            </div>
-            <div className="flex items-center space-x-2">
               <span className="w-4 h-4 bg-gray-500 rounded"></span>
               <span>
-                <strong>1 - Нейтральный</strong>: нейтральная тональность
+                <strong>0 - Нейтральная</strong>: нейтральная тональность
               </span>
             </div>
             <div className="flex items-center space-x-2">
               <span className="w-4 h-4 bg-green-500 rounded"></span>
               <span>
-                <strong>2 - Позитивный</strong>: положительная тональность
+                <strong>1 - Положительная</strong>: положительная тональность
               </span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="w-4 h-4 bg-red-500 rounded"></span>
+              <span>
+                <strong>2 - Негативная</strong>: негативная тональность
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Предобработка текста</h2>
+          <div className="space-y-4 text-gray-700 dark:text-gray-300">
+            <p>
+              Предобработка текста включает нормализацию: удаление лишних пробелов и приведение к единому формату.
+            </p>
+            <p>
+              Вы можете включить или отключить предобработку с помощью чекбокса "Включить предобработку текста" на главной странице.
+            </p>
+            <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded">
+              <p className="text-sm">
+                <strong>Рекомендация:</strong> Предобработка включена по умолчанию и рекомендуется для большинства случаев, так как улучшает качество анализа.
+              </p>
             </div>
           </div>
         </section>
@@ -188,7 +212,14 @@ export function HelpPage() {
           <div className="space-y-4 text-gray-700 dark:text-gray-300">
             <div>
               <p className="font-semibold mb-1">Какой максимальный размер файла?</p>
-              <p>Максимальный размер CSV файла: 500MB</p>
+              <p>Система поддерживает обработку файлов любого размера. Для больших файлов (60000+ строк) обработка может занять некоторое время.</p>
+            </div>
+            <div>
+              <p className="font-semibold mb-1">Сколько времени занимает обработка?</p>
+              <p>
+                Скорость обработки зависит от размера файла и используемого устройства. На CPU: ~100-120ms на текст, на GPU: ~20-40ms на текст. 
+                Для файла из 60000 строк ожидаемое время: ~1.5-2 часа на CPU, ~20-40 минут на GPU.
+              </p>
             </div>
             <div>
               <p className="font-semibold mb-1">Как посмотреть прошедшие анализы?</p>
@@ -207,7 +238,15 @@ export function HelpPage() {
             <div>
               <p className="font-semibold mb-1">Как экспортировать результаты?</p>
               <p>
-                На странице результатов нажмите кнопку "Скачать CSV" для экспорта всех данных.
+                На странице результатов нажмите кнопку "Скачать CSV" для экспорта всех данных. 
+                CSV файл будет содержать колонки: text, src (если был), pred_label, и pred_proba (если доступны вероятности).
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold mb-1">Что означает pred_proba в результатах?</p>
+              <p>
+                <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">pred_proba</code> содержит вероятности для каждого класса в формате [нейтральная, положительная, негативная]. 
+                Например, [0.1, 0.8, 0.1] означает 10% вероятность нейтральной, 80% положительной и 10% негативной тональности.
               </p>
             </div>
           </div>

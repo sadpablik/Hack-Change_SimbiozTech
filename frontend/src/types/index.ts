@@ -31,6 +31,7 @@ export interface ValidationResponse {
   macro_f1: number;
   class_metrics: ClassMetrics[];
   validation_id?: string | null;
+  processing_time?: number;
 }
 
 export interface ValidationItem {
@@ -110,6 +111,7 @@ export interface PredictResponse {
   download_url: string;
   skipped_rows?: number;
   warning?: string | null;
+  processing_time?: number;
 }
 
 export interface PreprocessRequest {

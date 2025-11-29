@@ -6,19 +6,19 @@ export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 500; // Максимальный limit для API (ограничение бэкенда)
 
 export const CLASS_LABELS: Record<number, string> = {
-  0: 'Негативный',
-  1: 'Нейтральный',
-  2: 'Позитивный',
+  0: 'Нейтральная',
+  1: 'Положительная',
+  2: 'Негативная',
 };
 
 export const CLASS_COLORS: Record<number, string> = {
-  0: '#ef4444', // red
-  1: '#6b7280', // gray
-  2: '#10b981', // green
+  0: '#6b7280', // gray - Нейтральная
+  1: '#10b981', // green - Положительная
+  2: '#ef4444', // red - Негативная
 };
 
 export const CLASS_COLORS_DARK: Record<number, string> = {
-  0: '#dc2626',
-  1: '#9ca3af',
-  2: '#059669',
+  0: '#9ca3af', // gray - Нейтральная
+  1: '#059669', // green - Положительная
+  2: '#dc2626', // red - Негативная
 };

@@ -30,6 +30,33 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      ml:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+    volumes:
+      - ./ml/models:/app/models
+      - ./ml/inference.py:/app/inference.py
+      - ./ml/app.py:/app/app.py
+    ports:
+      - "8001:8001"
+    environment:
+      - MODEL_PATH=./models/rubert-finetuned
+    mem_limit: 2g
+    mem_reservation: 1g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8001/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
   frontend:
     build:

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { CSVUpload } from '../components/upload/CSVUpload';
 import { MetricsDisplay } from '../components/validation/MetricsDisplay';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -14,6 +14,7 @@ export function ValidationPage() {
   const [error, setError] = useState<string | null>(null);
   const [confusionMatrix, setConfusionMatrix] = useState<number[][] | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
@@ -22,16 +23,29 @@ export function ValidationPage() {
     setConfusionMatrix(null);
   };
 
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setIsValidating(false);
+    setError(null);
+    showToast('Валидация отменена', 'info');
+  };
+
   const handleStartValidation = async () => {
     if (!selectedFile) return;
 
+    abortControllerRef.current = new AbortController();
     setIsValidating(true);
     setError(null);
     setMetrics(null);
     setConfusionMatrix(null);
 
     try {
-      const response = await apiClient.validateCSV(selectedFile);
+      const response = await apiClient.validateCSV(selectedFile, abortControllerRef.current?.signal);
+      if (abortControllerRef.current?.signal.aborted) {
+        return;
+      }
       setMetrics(response);
 
       const matrix = calculateConfusionMatrix(response);
@@ -39,11 +53,16 @@ export function ValidationPage() {
 
       showToast(`Macro-F1: ${response.macro_f1.toFixed(4)}`, 'success');
     } catch (err) {
+      if (abortControllerRef.current?.signal.aborted || (err instanceof Error && err.message === 'Запрос отменен')) {
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : 'Ошибка при расчете метрик';
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {
-      setIsValidating(false);
+      if (!abortControllerRef.current?.signal.aborted) {
+        setIsValidating(false);
+      }
     }
   };
 
@@ -121,9 +140,17 @@ export function ValidationPage() {
         )}
 
         {isValidating && (
-          <div className="mt-6 flex items-center justify-center space-x-3">
-            <LoadingSpinner size="md" />
-            <span className="text-gray-600 dark:text-gray-400">Идёт обработка и расчёт метрик...</span>
+          <div className="mt-6 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <LoadingSpinner size="md" />
+              <span className="text-gray-600 dark:text-gray-400">Идёт обработка и расчёт метрик...</span>
+            </div>
+            <button
+              onClick={handleCancel}
+              className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+            >
+              Отменить
+            </button>
           </div>
         )}
 

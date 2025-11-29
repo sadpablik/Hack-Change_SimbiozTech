@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -6,6 +6,7 @@ import { ErrorMessage } from '../components/common/ErrorMessage';
 import { showToast } from '../utils/toast';
 import { apiClient } from '../services/api';
 import { ClassDistribution } from '../components/analysis/ClassDistribution';
+import { TopWords } from '../components/analysis/TopWords';
 
 interface PredictionRow {
   text: string;
@@ -22,63 +23,13 @@ export function ResultsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<number | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [editedLabels, setEditedLabels] = useState<Record<number, number>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(100);
 
-  useEffect(() => {
-    if (predictionId) {
-      loadData();
-    }
-  }, [predictionId]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filter, search]);
-
-  const loadData = async () => {
-    if (!predictionId) {
-      setError('Не указан ID предсказания');
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      console.log('Загрузка данных для predictionId:', predictionId);
-      const blob = await apiClient.downloadPredictions(predictionId);
-      console.log('Получен blob, размер:', blob.size);
-
-      const text = await blob.text();
-      console.log('Текст получен, длина:', text.length, 'первые 200 символов:', text.substring(0, 200));
-
-      if (!text || text.trim().length === 0) {
-        throw new Error('Получен пустой файл от сервера');
-      }
-
-      const rows = parseCSV(text);
-      console.log('Распарсено строк:', rows.length);
-
-      if (rows.length === 0) {
-        throw new Error('Не удалось распарсить данные из CSV файла. Возможно, файл имеет неверный формат.');
-      }
-
-      setData(rows);
-      console.log('Данные установлены, количество:', rows.length);
-    } catch (err) {
-      console.error('Ошибка загрузки данных:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ошибка загрузки данных';
-      setError(errorMessage);
-      showToast(errorMessage, 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const parseCSV = (csvText: string): PredictionRow[] => {
+  const parseCSV = useCallback((csvText: string): PredictionRow[] => {
     try {
       const result = Papa.parse(csvText, {
         header: true,
@@ -113,7 +64,7 @@ export function ResultsPage() {
             try {
               row.pred_proba = JSON.parse(probaStr);
             } catch {
-              // ignore
+              row.pred_proba = undefined;
             }
           }
         }
@@ -128,11 +79,127 @@ export function ResultsPage() {
       console.error('Ошибка парсинга CSV:', err);
       throw err;
     }
+  }, []);
+
+  const loadData = async () => {
+    if (!predictionId) {
+      setError('Не указан ID предсказания');
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const blob = await apiClient.downloadPredictions(predictionId);
+      const text = await blob.text();
+
+      if (!text || text.trim().length === 0) {
+        throw new Error('Получен пустой файл от сервера');
+      }
+
+      const rows = parseCSV(text);
+
+      if (rows.length === 0) {
+        throw new Error('Не удалось распарсить данные из CSV файла. Возможно, файл имеет неверный формат.');
+      }
+
+      setData(rows);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка загрузки данных';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  useEffect(() => {
+    if (predictionId) {
+      loadData();
+    } else {
+      setIsLoading(false);
+      setError('Не указан ID предсказания');
+    }
+  }, [predictionId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, search, sourceFilter]);
+
+  const handleDownload = useCallback(async () => {
+    if (!predictionId) return;
+
+    try {
+      const blob = await apiClient.downloadPredictions(predictionId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `predictions_${predictionId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      showToast('Файл успешно скачан', 'success');
+    } catch (err) {
+      showToast('Ошибка при скачивании файла', 'error');
+    }
+  }, [predictionId]);
+
+  const handleCopyToClipboard = useCallback(async () => {
+    try {
+      const correctedData = data.map((row, idx) => ({
+        text: row.text,
+        src: row.src || '',
+        pred_label: editedLabels[idx] ?? row.pred_label,
+      }));
+
+      const csv = [
+        ['text', 'src', 'pred_label'].join(','),
+        ...correctedData.map(row => {
+          return [
+            `"${row.text.replace(/"/g, '""')}"`,
+            row.src ? `"${row.src.replace(/"/g, '""')}"` : '',
+            row.pred_label,
+          ].join(',');
+        }),
+      ].join('\n');
+
+      await navigator.clipboard.writeText(csv);
+      showToast('Данные скопированы в буфер обмена', 'success');
+    } catch (err) {
+      showToast('Ошибка при копировании в буфер обмена', 'error');
+    }
+  }, [data, editedLabels]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && e.shiftKey) {
+        e.preventDefault();
+        handleCopyToClipboard();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleDownload();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCopyToClipboard, handleDownload, navigate]);
+
+  const uniqueSources = Array.from(new Set(data.filter(row => row.src).map(row => row.src!))).sort();
+  
   const filteredData = data.filter(row => {
     if (filter !== null && row.pred_label !== filter) return false;
-    if (search && !row.text.toLowerCase().includes(search.toLowerCase())) return false;
+    if (sourceFilter && row.src !== sourceFilter) return false;
+    if (search) {
+      const searchLower = search.toLowerCase();
+      const textLower = row.text.toLowerCase();
+      const words = searchLower.split(/\s+/).filter(w => w.length > 0);
+      if (words.length === 0) return true;
+      return words.some(word => textLower.includes(word));
+    }
     return true;
   });
 
@@ -152,29 +219,10 @@ export function ResultsPage() {
 
   const getLabelText = (label: number) => {
     switch (label) {
-      case 0: return 'Отрицательный';
-      case 1: return 'Нейтральный';
-      case 2: return 'Положительный';
+      case 0: return 'Нейтральная';
+      case 1: return 'Положительная';
+      case 2: return 'Негативная';
       default: return 'Неизвестно';
-    }
-  };
-
-  const handleDownload = async () => {
-    if (!predictionId) return;
-
-    try {
-      const blob = await apiClient.downloadPredictions(predictionId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `predictions_${predictionId}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      showToast('Файл успешно скачан', 'success');
-    } catch (err) {
-      showToast('Ошибка при скачивании файла', 'error');
     }
   };
 
@@ -251,23 +299,6 @@ export function ResultsPage() {
     );
   }
 
-  if (data.length === 0) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="card">
-          <p className="text-center text-gray-600 dark:text-gray-400 py-8">
-            Нет данных для отображения
-          </p>
-          <div className="mt-4 text-center">
-            <button onClick={() => navigate('/')} className="btn-primary">
-              Вернуться на главную
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (data.length === 0 && !isLoading && !error) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -276,7 +307,10 @@ export function ResultsPage() {
             Нет данных для отображения. Возможно, файл еще обрабатывается или произошла ошибка.
           </p>
           <div className="mt-4 text-center">
-            <button onClick={() => navigate('/')} className="btn-primary">
+            <button onClick={loadData} className="btn-primary mr-2">
+              Попробовать снова
+            </button>
+            <button onClick={() => navigate('/')} className="btn-secondary">
               Вернуться на главную
             </button>
           </div>
@@ -298,29 +332,42 @@ export function ResultsPage() {
             </p>
           )}
         </div>
-        <div className="flex space-x-3">
-          <button onClick={handleDownload} className="btn-primary">
-            Скачать CSV
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={handleDownload} className="btn-primary" title="Ctrl+S">
+            💾 Скачать CSV
+          </button>
+          <button
+            onClick={handleCopyToClipboard}
+            className="btn-primary bg-purple-600 hover:bg-purple-700"
+            title="Ctrl+Shift+C"
+          >
+            📋 Копировать
           </button>
           {hasCorrections && (
             <button onClick={handleExportCorrections} className="btn-primary bg-green-600 hover:bg-green-700">
-              Экспорт корректировок ({Object.keys(editedLabels).length})
+              ✅ Экспорт корректировок ({Object.keys(editedLabels).length})
             </button>
           )}
-          <button onClick={() => navigate('/')} className="btn-secondary">
-            На главную
-          </button>
+        </div>
+        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          💡 Горячие клавиши: <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd> - скачать, <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+Shift+C</kbd> - копировать
         </div>
       </div>
 
       {data.length > 0 && (
-        <div className="card mb-6">
-          <ClassDistribution data={data} />
-        </div>
+        <>
+          <div className="card mb-6">
+            <ClassDistribution data={data} />
+          </div>
+          
+          <div className="card mb-6">
+            <TopWords data={data} topN={20} />
+          </div>
+        </>
       )}
 
       <div className="card mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Поиск по тексту
@@ -329,9 +376,12 @@ export function ResultsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Введите текст для поиска..."
+              placeholder="Введите слово или фразу..."
               className="input-field"
             />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Поддерживается поиск по нескольким словам
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -343,11 +393,30 @@ export function ResultsPage() {
               className="input-field"
             >
               <option value="">Все классы</option>
-              <option value="0">0 - Отрицательный</option>
-              <option value="1">1 - Нейтральный</option>
-              <option value="2">2 - Положительный</option>
+              <option value="0">0 - Нейтральная</option>
+              <option value="1">1 - Положительная</option>
+              <option value="2">2 - Негативная</option>
             </select>
           </div>
+          {uniqueSources.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Фильтр по источнику
+              </label>
+              <select
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value)}
+                className="input-field"
+              >
+                <option value="">Все источники</option>
+                {uniqueSources.map((source) => (
+                  <option key={source} value={source}>
+                    {source}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -405,9 +474,9 @@ export function ResultsPage() {
                           }}
                           className={`text-xs font-medium rounded-lg px-2 py-1 border-0 focus:ring-2 focus:ring-blue-500 ${getLabelColor(editedLabels[originalIdx] ?? row.pred_label)}`}
                         >
-                          <option value="0">0 - Отрицательный</option>
-                          <option value="1">1 - Нейтральный</option>
-                          <option value="2">2 - Положительный</option>
+                          <option value="0">0 - Нейтральная</option>
+                          <option value="1">1 - Положительная</option>
+                          <option value="2">2 - Негативная</option>
                         </select>
                         {editedLabels[originalIdx] !== undefined && editedLabels[originalIdx] !== row.pred_label && (
                           <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(изменено)</span>

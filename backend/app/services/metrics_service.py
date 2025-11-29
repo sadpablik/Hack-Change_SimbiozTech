@@ -7,11 +7,14 @@ from sklearn.metrics import f1_score, precision_recall_fscore_support
 
 
 class MetricsService:
+    """Сервис для расчета метрик качества."""
+
     CLASS_LABELS: list[int] = [0, 1, 2]
     DECIMAL_PLACES: int = 4
 
     @staticmethod
     def calculate_macro_f1(y_true: list[int], y_pred: list[int]) -> dict[str, Any]:
+        """Рассчитывает macro-F1 и метрики по классам."""
         y_true_array: np.ndarray = np.array(y_true)
         y_pred_array: np.ndarray = np.array(y_pred)
 
@@ -19,10 +22,6 @@ class MetricsService:
             f1_score(y_true_array, y_pred_array, average="macro", zero_division=0)
         )
 
-        precision: np.ndarray
-        recall: np.ndarray
-        f1: np.ndarray
-        _: np.ndarray
         precision, recall, f1, _ = precision_recall_fscore_support(
             y_true_array,
             y_pred_array,

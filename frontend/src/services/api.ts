@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosError, CanceledError } from 'axios';
 import { showToast } from '../utils/toast';
 import type {
   CSVUploadResponse,
@@ -16,12 +16,11 @@ import type {
   ModelStatusResponse,
 } from '../types';
 
-// API URL - для Docker и локальной разработки используется localhost:8000
-// так как браузер делает запросы с localhost:3000 к localhost:8000
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiClient {
   private client: AxiosInstance;
+  private abortControllers: Map<string, AbortController> = new Map();
 
   constructor() {
     this.client = axios.create({
@@ -32,10 +31,20 @@ class ApiClient {
       timeout: 600000,
     });
 
-    // Interceptor для обработки ошибок
     this.client.interceptors.response.use(
       (response) => response,
       (error: AxiosError) => {
+        console.error('API Error:', {
+          message: error.message,
+          code: error.code,
+          response: error.response?.data,
+          status: error.response?.status,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+          }
+        });
+        
         if (error.response) {
           const data = error.response.data as { detail?: string | { error?: { code?: string; message?: string; row?: number } } };
 
@@ -54,8 +63,18 @@ class ApiClient {
           showToast(message, 'error');
           throw new Error(message);
         }
-        showToast('Ошибка сети', 'error');
-        throw error;
+        
+        let networkMessage = 'Ошибка сети';
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          networkMessage = 'Превышено время ожидания ответа от сервера';
+        } else if (error.code === 'ECONNREFUSED') {
+          networkMessage = 'Не удалось подключиться к серверу';
+        } else if (error.message) {
+          networkMessage = `Ошибка сети: ${error.message}`;
+        }
+        
+        showToast(networkMessage, 'error');
+        throw new Error(networkMessage);
       }
     );
   }
@@ -98,36 +117,59 @@ class ApiClient {
     return response.data;
   }
 
-  async predictCSV(file: File): Promise<PredictResponse> {
+  cancelRequest(requestId: string) {
+    const controller = this.abortControllers.get(requestId);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(requestId);
+    }
+  }
+
+  async predictCSV(file: File, enablePreprocessing: boolean = true, signal?: AbortSignal): Promise<PredictResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
     const response = await this.client.post<PredictResponse>(
-      '/api/predict',
+      `/api/predict?enable_preprocessing=${enablePreprocessing}`,
       formData,
       {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        signal,
       }
     );
     return response.data;
   }
 
-  async validateCSV(file: File): Promise<ValidationResponse> {
+  async validateCSV(file: File, enablePreprocessing: boolean = true, signal?: AbortSignal): Promise<ValidationResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await this.client.post<ValidationResponse>(
-      '/api/validate',
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+    console.log('[API] Starting validation for file:', file.name, 'size:', file.size);
+    
+    try {
+      const response = await this.client.post<ValidationResponse>(
+        `/api/validate?enable_preprocessing=${enablePreprocessing}`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          timeout: 600000,
+          signal,
+        }
+      );
+      console.log('[API] Validation response received:', response.data);
+      return response.data;
+    } catch (error) {
+      if (error instanceof CanceledError || axios.isCancel(error)) {
+        console.log('[API] Validation cancelled');
+        throw new Error('Запрос отменен');
       }
-    );
-    return response.data;
+      console.error('[API] Validation error:', error);
+      throw error;
+    }
   }
 
   async downloadPredictions(predictionId: string): Promise<Blob> {
