@@ -49,7 +49,10 @@ coverage/
 
 # Бэкенд-специфичное
 alembic/versions_backup/
-backend/.env
+
+# Frontend-специфичное
+frontend/node_modules/
+frontend/dist/
 
 # Docker
 **/docker-compose.override.yml

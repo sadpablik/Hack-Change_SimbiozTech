@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
+from app.services.minio_service import minio_service
 from app.services.ml_service import ml_service
 from fastapi import FastAPI
 from sqlalchemy import text
