@@ -8,11 +8,12 @@ import { MAX_FILE_SIZE_MB } from '../../utils/constants';
 import type { CSVRow } from '../../types';
 
 interface CSVUploadProps {
-  onUpload: (file: File) => Promise<void>;
+  onFileSelect?: (file: File) => void;
+  onUpload?: (file: File) => Promise<void>;
   isLoading?: boolean;
 }
 
-export function CSVUpload({ onUpload, isLoading = false }: CSVUploadProps) {
+export function CSVUpload({ onFileSelect, onUpload, isLoading = false }: CSVUploadProps) {
   const [previewData, setPreviewData] = useState<CSVRow[] | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +30,16 @@ export function CSVUpload({ onUpload, isLoading = false }: CSVUploadProps) {
         validateFileSize(file, MAX_FILE_SIZE_MB);
         const preview = await previewCSV(file, 5);
         setPreviewData(preview);
+        if (onFileSelect) {
+          onFileSelect(file);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Ошибка при чтении файла');
         setSelectedFile(null);
         setPreviewData(null);
       }
     },
-    []
+    [onFileSelect]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -48,7 +52,7 @@ export function CSVUpload({ onUpload, isLoading = false }: CSVUploadProps) {
   });
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !onUpload) return;
 
     setError(null);
     try {
@@ -116,20 +120,22 @@ export function CSVUpload({ onUpload, isLoading = false }: CSVUploadProps) {
             </button>
           </div>
           <CSVPreview data={previewData} />
-          <button
-            onClick={handleUpload}
-            disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
-          >
-            {isLoading ? (
-              <>
-                <LoadingSpinner size="sm" className="mr-2" />
-                Загрузка...
-              </>
-            ) : (
-              'Загрузить файл'
-            )}
-          </button>
+          {onUpload && (
+            <button
+              onClick={handleUpload}
+              disabled={isLoading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+            >
+              {isLoading ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Загрузка...
+                </>
+              ) : (
+                'Загрузить файл'
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>

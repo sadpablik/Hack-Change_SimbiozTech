@@ -10,6 +10,10 @@ import type {
   ResultsListResponse,
   ResultsFilters,
   TextAnalysisRequest,
+  PredictResponse,
+  PreprocessRequest,
+  PreprocessResponse,
+  ModelStatusResponse,
 } from '../types';
 
 // API URL - для Docker и локальной разработки используется localhost:8000
@@ -25,6 +29,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
+      timeout: 600000,
     });
 
     // Interceptor для обработки ошибок
@@ -32,10 +37,20 @@ class ApiClient {
       (response) => response,
       (error: AxiosError) => {
         if (error.response) {
-          const message =
-            (error.response.data as { detail?: string })?.detail ||
-            error.message ||
-            'Произошла ошибка';
+          const data = error.response.data as { detail?: string | { error?: { code?: string; message?: string; row?: number } } };
+
+          let message = 'Произошла ошибка';
+          if (typeof data.detail === 'string') {
+            message = data.detail;
+          } else if (data.detail?.error?.message) {
+            message = data.detail.error.message;
+            if (data.detail.error.row) {
+              message += ` (строка ${data.detail.error.row})`;
+            }
+          } else if (error.message) {
+            message = error.message;
+          }
+
           showToast(message, 'error');
           throw new Error(message);
         }
@@ -79,6 +94,75 @@ class ApiClient {
   async validate(sessionId: number): Promise<ValidationResponse> {
     const response = await this.client.post<ValidationResponse>(
       `/api/validate?session_id=${sessionId}`
+    );
+    return response.data;
+  }
+
+  async predictCSV(file: File): Promise<PredictResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await this.client.post<PredictResponse>(
+      '/api/predict',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    return response.data;
+  }
+
+  async validateCSV(file: File): Promise<ValidationResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await this.client.post<ValidationResponse>(
+      '/api/validate',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    return response.data;
+  }
+
+  async downloadPredictions(predictionId: string): Promise<Blob> {
+    const response = await this.client.get(
+      `/api/download/predicted/${predictionId}`,
+      {
+        responseType: 'blob',
+      }
+    );
+    return response.data;
+  }
+
+  async listPredictions(): Promise<{
+    predictions: Array<{
+      prediction_id: string;
+      created_at: string;
+      rows_count: number;
+    }>;
+    total: number;
+  }> {
+    const response = await this.client.get('/api/predictions/list');
+    return response.data;
+  }
+
+  async preprocessText(text: string): Promise<PreprocessResponse> {
+    const response = await this.client.post<PreprocessResponse>(
+      '/api/preprocess',
+      { text } as PreprocessRequest
+    );
+    return response.data;
+  }
+
+  async getModelStatus(): Promise<ModelStatusResponse> {
+    const response = await this.client.get<ModelStatusResponse>(
+      '/api/model/status'
     );
     return response.data;
   }

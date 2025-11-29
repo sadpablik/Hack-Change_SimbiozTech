@@ -11,7 +11,7 @@ export function HelpPage() {
       </div>
 
       <div className="space-y-6">
-        <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <section className="card">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
             Формат CSV файлов
           </h2>
@@ -20,15 +20,31 @@ export function HelpPage() {
               CSV файл должен содержать обязательную колонку <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">text</code> с
               текстами для анализа.
             </p>
-            <p>Опциональные колонки:</p>
-            <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>
-                <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">source</code> - источник текста
-              </li>
-              <li>
-                <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">label</code> - истинная метка класса (0, 1, или 2) для валидации
-              </li>
-            </ul>
+            <div className="mt-3">
+              <p className="font-semibold mb-2">Для режима "Предсказание":</p>
+              <ul className="list-disc list-inside space-y-1 ml-4">
+                <li>
+                  <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">text</code> - обязательная колонка с текстами
+                </li>
+                <li>
+                  <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">src</code> - опциональная колонка с источником текста
+                </li>
+              </ul>
+            </div>
+            <div className="mt-3">
+              <p className="font-semibold mb-2">Для режима "Валидация":</p>
+              <ul className="list-disc list-inside space-y-1 ml-4">
+                <li>
+                  <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">text</code> - обязательная колонка с текстами
+                </li>
+                <li>
+                  <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">label</code> - обязательная колонка с истинными метками (0, 1, или 2)
+                </li>
+                <li>
+                  <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">src</code> - опциональная колонка с источником текста
+                </li>
+              </ul>
+            </div>
             <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded">
               <p className="font-mono text-sm">
                 text,source,label<br />
@@ -72,16 +88,46 @@ export function HelpPage() {
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
             Пошаговая инструкция
           </h2>
-          <ol className="list-decimal list-inside space-y-3 text-gray-700 dark:text-gray-300">
-            <li>Загрузите CSV файл с отзывами через drag-n-drop или кнопку выбора</li>
-            <li>Проверьте preview первых строк файла</li>
-            <li>Нажмите "Загрузить файл" для создания сессии анализа</li>
-            <li>Нажмите "Начать анализ" для обработки всех текстов</li>
-            <li>Просмотрите результаты на странице анализа</li>
-            <li>Используйте фильтры для поиска нужных результатов</li>
-            <li>При необходимости скорректируйте метки вручную</li>
-            <li>Экспортируйте результаты в CSV</li>
-          </ol>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Предсказание тональности
+              </h3>
+              <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 ml-2">
+                <li>Выберите режим "Предсказание" на главной странице</li>
+                <li>Загрузите CSV файл с колонкой <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">text</code> (опционально: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">src</code>)</li>
+                <li>Проверьте preview первых строк файла</li>
+                <li>Нажмите "Начать анализ" для обработки всех текстов</li>
+                <li>Просмотрите результаты: предсказанные классы и вероятности</li>
+                <li>Используйте фильтры и поиск для навигации по результатам</li>
+                <li>При необходимости скорректируйте метки вручную через выпадающий список</li>
+                <li>Скачайте результаты в CSV или экспортируйте корректировки</li>
+              </ol>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Валидация модели
+              </h3>
+              <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 ml-2">
+                <li>Выберите режим "Валидация" на главной странице</li>
+                <li>Загрузите CSV файл с колонками <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">text</code> и <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">label</code></li>
+                <li>Нажмите "Начать валидацию"</li>
+                <li>Просмотрите метрики: Macro-F1, Precision, Recall по классам</li>
+                <li>Изучите матрицу ошибок (Confusion Matrix)</li>
+              </ol>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Просмотр истории
+              </h3>
+              <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 ml-2">
+                <li>Перейдите на страницу "История" в главном меню</li>
+                <li>Просмотрите список всех выполненных анализов</li>
+                <li>Нажмите "Просмотр" для открытия результатов анализа</li>
+                <li>Нажмите "Скачать" для загрузки CSV файла с результатами</li>
+              </ol>
+            </div>
+          </div>
         </section>
 
         <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -142,7 +188,14 @@ export function HelpPage() {
           <div className="space-y-4 text-gray-700 dark:text-gray-300">
             <div>
               <p className="font-semibold mb-1">Какой максимальный размер файла?</p>
-              <p>Максимальный размер CSV файла: 10MB</p>
+              <p>Максимальный размер CSV файла: 500MB</p>
+            </div>
+            <div>
+              <p className="font-semibold mb-1">Как посмотреть прошедшие анализы?</p>
+              <p>
+                Перейдите на страницу "История" в главном меню, где вы сможете просмотреть все выполненные анализы,
+                открыть их результаты или скачать CSV файлы.
+              </p>
             </div>
             <div>
               <p className="font-semibold mb-1">Можно ли исправить предсказания модели?</p>

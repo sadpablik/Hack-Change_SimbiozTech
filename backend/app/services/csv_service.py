@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException, UploadFile
 
-MAX_FILE_SIZE: int = 100 * 1024 * 1024
+MAX_FILE_SIZE: int = 500 * 1024 * 1024
 
 
 class CSVValidationError(Exception):
@@ -50,7 +50,7 @@ class CSVService:
     @staticmethod
     async def parse_csv(
         file: UploadFile, require_label: bool = False
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], list[int]]:
         try:
             contents: bytes = await file.read()
 
@@ -82,13 +82,29 @@ class CSVService:
             delimiter = CSVService._detect_delimiter(contents)
 
             try:
-                df: pd.DataFrame = pd.read_csv(
-                    io.StringIO(text_content),
-                    delimiter=delimiter,
-                    quotechar='"',
-                    skipinitialspace=True,
-                    on_bad_lines="skip",
-                )
+                chunk_size = 10000
+                file_size = len(text_content)
+
+                if file_size > 10 * 1024 * 1024:
+                    chunks = []
+                    for chunk in pd.read_csv(
+                        io.StringIO(text_content),
+                        delimiter=delimiter,
+                        quotechar='"',
+                        skipinitialspace=True,
+                        on_bad_lines="skip",
+                        chunksize=chunk_size,
+                    ):
+                        chunks.append(chunk)
+                    df: pd.DataFrame = pd.concat(chunks, ignore_index=True)
+                else:
+                    df: pd.DataFrame = pd.read_csv(
+                        io.StringIO(text_content),
+                        delimiter=delimiter,
+                        quotechar='"',
+                        skipinitialspace=True,
+                        on_bad_lines="skip",
+                    )
             except pd.errors.EmptyDataError:
                 raise HTTPException(
                     status_code=400,
@@ -136,6 +152,8 @@ class CSVService:
                     )
 
             data: list[dict[str, Any]] = []
+            skipped_rows: list[int] = []
+
             for idx, row in df.iterrows():
                 row_num = idx + 2
 
@@ -144,16 +162,8 @@ class CSVService:
                 if pd.isna(text_value) or (
                     isinstance(text_value, str) and not text_value.strip()
                 ):
-                    raise HTTPException(
-                        status_code=400,
-                        detail={
-                            "error": {
-                                "code": "INVALID_CSV",
-                                "message": f"Строка {row_num}: поле 'text' не может быть пустым",
-                                "row": row_num,
-                            }
-                        },
-                    )
+                    skipped_rows.append(row_num)
+                    continue
 
                 text_value = str(text_value) if not pd.isna(text_value) else ""
 
@@ -218,7 +228,7 @@ class CSVService:
 
                 data.append(record)
 
-            return data
+            return data, skipped_rows
 
         except HTTPException:
             raise
@@ -249,29 +259,53 @@ class CSVService:
         if include_proba and "pred_proba" in all_columns:
             column_order.append("pred_proba")
 
-        df_data: list[dict[str, Any]] = []
-        for record in data:
-            filtered_record: dict[str, Any] = {}
-            for col in column_order:
-                if col in record:
-                    value = record[col]
-                    if col == "pred_proba" and isinstance(value, list):
-                        filtered_record[col] = str(value)
+        if len(data) > 100000:
+            output = io.StringIO()
+            output.write(",".join(column_order) + "\n")
+
+            for record in data:
+                row_values = []
+                for col in column_order:
+                    if col in record:
+                        value = record[col]
+                        if col == "pred_proba" and isinstance(value, list):
+                            row_values.append(str(value))
+                        elif isinstance(value, str) and (
+                            "," in value or '"' in value or "\n" in value
+                        ):
+                            escaped_value = value.replace('"', '""')
+                            row_values.append(f'"{escaped_value}"')
+                        else:
+                            row_values.append(str(value))
                     else:
-                        filtered_record[col] = value
-            df_data.append(filtered_record)
+                        row_values.append("")
+                output.write(",".join(row_values) + "\n")
 
-        df: pd.DataFrame = pd.DataFrame(df_data)
+            return output.getvalue()
+        else:
+            df_data: list[dict[str, Any]] = []
+            for record in data:
+                filtered_record: dict[str, Any] = {}
+                for col in column_order:
+                    if col in record:
+                        value = record[col]
+                        if col == "pred_proba" and isinstance(value, list):
+                            filtered_record[col] = str(value)
+                        else:
+                            filtered_record[col] = value
+                df_data.append(filtered_record)
 
-        for col in column_order:
-            if col not in df.columns:
-                df[col] = ""
+            df: pd.DataFrame = pd.DataFrame(df_data)
 
-        df = df[[col for col in column_order if col in df.columns]]
+            for col in column_order:
+                if col not in df.columns:
+                    df[col] = ""
 
-        output: io.StringIO = io.StringIO()
-        df.to_csv(output, index=False, encoding="utf-8", sep=",")
-        return output.getvalue()
+            df = df[[col for col in column_order if col in df.columns]]
+
+            output: io.StringIO = io.StringIO()
+            df.to_csv(output, index=False, encoding="utf-8", sep=",")
+            return output.getvalue()
 
 
 csv_service: CSVService = CSVService()

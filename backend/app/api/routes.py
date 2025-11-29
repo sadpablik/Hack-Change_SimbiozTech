@@ -101,7 +101,7 @@ async def upload_csv(
         HTTPException: При ошибках обработки файла или сохранения данных
     """
     try:
-        data: list[dict[str, Any]] = await csv_service.parse_csv(file)
+        data, _ = await csv_service.parse_csv(file)
 
         analysis_session: AnalysisSession = AnalysisSession(
             filename=file.filename or "unknown.csv"
@@ -630,31 +630,44 @@ async def update_result(
 @router.post("/predict", response_model=PredictResponse, tags=["analysis"])
 async def predict_csv(file: UploadFile) -> PredictResponse:
     try:
-        data = await csv_service.parse_csv(file, require_label=False)
+        data, skipped_rows = await csv_service.parse_csv(file, require_label=False)
 
-        texts = [row["text"] for row in data]
-        preprocessed_texts = [
-            text_preprocessing_service.normalize(text) for text in texts
-        ]
-        predictions = ml_service.predict_batch_with_proba(preprocessed_texts)
-
+        batch_size = 1000
         results: list[dict[str, Any]] = []
-        for row, (label, proba) in zip(data, predictions):
-            result: dict[str, Any] = {
-                "text": row["text"],
-                "pred_label": label,
-            }
-            if "src" in row:
-                result["src"] = row["src"]
-            result["pred_proba"] = proba
-            results.append(result)
+
+        for i in range(0, len(data), batch_size):
+            batch = data[i : i + batch_size]
+            texts = [row["text"] for row in batch]
+            preprocessed_texts = [
+                text_preprocessing_service.normalize(text) for text in texts
+            ]
+            predictions = ml_service.predict_batch_with_proba(preprocessed_texts)
+
+            for row, (label, proba) in zip(batch, predictions):
+                result: dict[str, Any] = {
+                    "text": row["text"],
+                    "pred_label": label,
+                }
+                if "src" in row:
+                    result["src"] = row["src"]
+                result["pred_proba"] = proba
+                results.append(result)
 
         prediction_id = storage_service.save_predictions(results)
+
+        warning = None
+        if skipped_rows:
+            if len(skipped_rows) <= 10:
+                warning = f"Пропущено {len(skipped_rows)} строк с пустым полем 'text': {', '.join(map(str, skipped_rows))}"
+            else:
+                warning = f"Пропущено {len(skipped_rows)} строк с пустым полем 'text' (первые: {', '.join(map(str, skipped_rows[:10]))}...)"
 
         return PredictResponse(
             status="ok",
             rows=len(results),
             download_url=f"/api/download/predicted/{prediction_id}",
+            skipped_rows=len(skipped_rows),
+            warning=warning,
         )
     except HTTPException:
         raise
@@ -673,21 +686,24 @@ async def predict_csv(file: UploadFile) -> PredictResponse:
 @router.post("/validate", response_model=ValidationResponse, tags=["analysis"])
 async def validate_csv(file: UploadFile) -> ValidationResponse:
     try:
-        data = await csv_service.parse_csv(file, require_label=True)
+        data, skipped_rows = await csv_service.parse_csv(file, require_label=True)
 
-        texts = [row["text"] for row in data]
-        preprocessed_texts = [
-            text_preprocessing_service.normalize(text) for text in texts
-        ]
-        predictions = ml_service.predict_batch(preprocessed_texts)
-
+        batch_size = 1000
         y_true: list[int] = []
         y_pred: list[int] = []
 
-        for row, (pred_label, _) in zip(data, predictions):
-            if "label" in row:
-                y_true.append(row["label"])
-                y_pred.append(pred_label)
+        for i in range(0, len(data), batch_size):
+            batch = data[i : i + batch_size]
+            texts = [row["text"] for row in batch]
+            preprocessed_texts = [
+                text_preprocessing_service.normalize(text) for text in texts
+            ]
+            predictions = ml_service.predict_batch(preprocessed_texts)
+
+            for row, (pred_label, _) in zip(batch, predictions):
+                if "label" in row:
+                    y_true.append(row["label"])
+                    y_pred.append(pred_label)
 
         if len(y_true) != len(y_pred):
             raise HTTPException(
@@ -742,6 +758,16 @@ async def download_predictions(
             "Content-Disposition": f'attachment; filename="predictions_{prediction_id}.csv"'
         },
     )
+
+
+@router.get("/predictions/list", tags=["analysis"])
+async def list_predictions() -> dict[str, Any]:
+    """Возвращает список всех сохраненных предсказаний."""
+    predictions = storage_service.list_predictions()
+    return {
+        "predictions": predictions,
+        "total": len(predictions),
+    }
 
 
 @router.post("/preprocess", response_model=PreprocessResponse, tags=["analysis"])

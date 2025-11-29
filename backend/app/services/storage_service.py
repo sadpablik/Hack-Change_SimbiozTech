@@ -33,6 +33,21 @@ class StorageService:
         return csv_service.export_to_csv(predictions, include_proba=include_proba)
 
     @classmethod
+    def list_predictions(cls) -> list[dict[str, Any]]:
+        """Возвращает список всех предсказаний с метаданными."""
+        result = []
+        for pred_id, data in cls._storage.items():
+            predictions = data.get("predictions", [])
+            result.append(
+                {
+                    "prediction_id": pred_id,
+                    "created_at": data.get("created_at"),
+                    "rows_count": len(predictions),
+                }
+            )
+        return sorted(result, key=lambda x: x["created_at"], reverse=True)
+
+    @classmethod
     def cleanup_old(cls, max_age_hours: int = 24) -> None:
         now = datetime.utcnow()
         to_delete = []

@@ -95,3 +95,35 @@ export interface CSVRow {
 export interface ConfusionMatrix {
   [key: string]: number; // "0-0", "0-1", "0-2", "1-0", etc.
 }
+
+export interface PredictResponse {
+  status: string;
+  rows: number;
+  download_url: string;
+  skipped_rows?: number;
+  warning?: string | null;
+}
+
+export interface PreprocessRequest {
+  text: string;
+}
+
+export interface PreprocessResponse {
+  original: string;
+  normalized: string;
+  tokens: string[];
+  lemmas: string[];
+  entities: Array<{
+    text: string;
+    label: string;
+    start: number;
+    end: number;
+  }>;
+}
+
+export interface ModelStatusResponse {
+  model_version: string;
+  status: string;
+  last_updated: string;
+  implementation: string;
+}

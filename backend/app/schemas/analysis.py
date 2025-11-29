@@ -113,6 +113,10 @@ class PredictResponse(BaseModel):
     status: str = Field("ok", description="Статус операции")
     rows: int = Field(..., description="Количество строк")
     download_url: str = Field(..., description="URL для скачивания CSV")
+    skipped_rows: int = Field(0, description="Количество пропущенных строк")
+    warning: str | None = Field(
+        None, description="Предупреждение о пропущенных строках"
+    )
 
 
 class PreprocessRequest(BaseModel):

@@ -1,31 +1,31 @@
 import type { ValidationResponse } from '../../types';
-import { ConfusionMatrix } from '../dashboard/ConfusionMatrix';
 
 interface MetricsDisplayProps {
   metrics: ValidationResponse;
 }
 
 export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
-  // Создаем confusion matrix из метрик
-  // Это упрощенная версия - в реальности нужны данные из бэкенда
-  const confusionMatrix = [
-    [0, 0, 0],
-    [0, 0, 0],
-    [0, 0, 0],
-  ];
+  const getLabelName = (label: number) => {
+    switch (label) {
+      case 0: return 'Отрицательный';
+      case 1: return 'Нейтральный';
+      case 2: return 'Положительный';
+      default: return `Класс ${label}`;
+    }
+  };
+
+  const getLabelColor = (label: number) => {
+    switch (label) {
+      case 0: return 'text-red-600 dark:text-red-400';
+      case 1: return 'text-yellow-600 dark:text-yellow-400';
+      case 2: return 'text-green-600 dark:text-green-400';
+      default: return 'text-gray-600 dark:text-gray-400';
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center">
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Macro-F1 Score</p>
-        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
-          {metrics.macro_f1.toFixed(4)}
-        </p>
-      </div>
-
-      <ConfusionMatrix matrix={confusionMatrix} />
-
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Метрики по классам
         </h3>
@@ -49,9 +49,11 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {metrics.class_metrics.map((metric) => (
-                <tr key={metric.class_label}>
-                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                    Класс {metric.class_label}
+                <tr key={metric.class_label} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td className="px-4 py-3">
+                    <span className={`text-sm font-semibold ${getLabelColor(metric.class_label)}`}>
+                      {metric.class_label} - {getLabelName(metric.class_label)}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                     {metric.precision.toFixed(4)}
@@ -59,7 +61,7 @@ export function MetricsDisplay({ metrics }: MetricsDisplayProps) {
                   <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                     {metric.recall.toFixed(4)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
                     {metric.f1.toFixed(4)}
                   </td>
                 </tr>

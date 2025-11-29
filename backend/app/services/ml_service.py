@@ -25,9 +25,9 @@ class MLService:
     def predict_with_proba(self, text: str) -> tuple[int, list[float]]:
         if not self._is_loaded:
             raise RuntimeError("Модель не загружена")
-        label: int = random.randint(0, 2)
         proba = np.random.dirichlet([1, 1, 1])
         proba = [round(float(p), 4) for p in proba]
+        label: int = int(np.argmax(proba))
         return label, proba
 
     def predict_batch(self, texts: list[str]) -> list[tuple[int, float]]:
@@ -44,9 +44,9 @@ class MLService:
             raise RuntimeError("Модель не загружена")
         results: list[tuple[int, list[float]]] = []
         for _ in texts:
-            label: int = random.randint(0, 2)
             proba = np.random.dirichlet([1, 1, 1])
             proba = [round(float(p), 4) for p in proba]
+            label: int = int(np.argmax(proba))
             results.append((label, proba))
         return results
 
