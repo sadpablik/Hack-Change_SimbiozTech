@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     )
     model_path: str = "models/sentiment_model"
     batch_size: int = 32
+    minio_endpoint: str = "minio:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_secure: bool = False
 
 
 @lru_cache
