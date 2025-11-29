@@ -107,3 +107,28 @@ class ResultsListResponse(BaseModel):
     total: int = Field(..., description="Общее количество результатов")
     limit: int = Field(..., description="Лимит на страницу")
     offset: int = Field(..., description="Смещение")
+
+
+class PredictResponse(BaseModel):
+    status: str = Field("ok", description="Статус операции")
+    rows: int = Field(..., description="Количество строк")
+    download_url: str = Field(..., description="URL для скачивания CSV")
+
+
+class PreprocessRequest(BaseModel):
+    text: str = Field(..., description="Текст для предобработки")
+
+
+class PreprocessResponse(BaseModel):
+    original: str = Field(..., description="Исходный текст")
+    normalized: str = Field(..., description="Нормализованный текст")
+    tokens: list[str] = Field(..., description="Токены")
+    lemmas: list[str] = Field(..., description="Леммы")
+    entities: list[dict] = Field(..., description="Именованные сущности")
+
+
+class ModelStatusResponse(BaseModel):
+    model_version: str = Field(..., description="Версия модели")
+    status: str = Field(..., description="Статус модели")
+    last_updated: str = Field(..., description="Дата последнего обновления")
+    implementation: str = Field(..., description="Реализация модели")

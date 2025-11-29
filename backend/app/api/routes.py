@@ -1,6 +1,7 @@
 """API эндпоинты для анализа тональности."""
 
 import traceback
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -10,6 +11,10 @@ from app.schemas.analysis import (
     BatchAnalysisResponse,
     ClassMetrics,
     CSVUploadResponse,
+    ModelStatusResponse,
+    PredictResponse,
+    PreprocessRequest,
+    PreprocessResponse,
     ResultsListResponse,
     SessionInfo,
     SessionsListResponse,
@@ -22,7 +27,10 @@ from app.schemas.analysis import (
 from app.services.csv_service import csv_service
 from app.services.metrics_service import metrics_service
 from app.services.ml_service import ml_service
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from app.services.storage_service import storage_service
+from app.services.text_preprocessing import text_preprocessing_service
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,7 +115,7 @@ async def upload_csv(
                 text=str(row["text"]),
                 pred_label=0,
                 confidence=0.0,
-                source=row.get("source"),
+                source=row.get("src"),
                 true_label=(
                     int(row["label"])
                     if "label" in row and pd.notna(row.get("label"))
@@ -129,10 +137,15 @@ async def upload_csv(
         raise
     except Exception as e:
         await session.rollback()
-        error_detail: str = (
-            f"Ошибка при сохранении данных: {str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "PREDICTION_FAILED",
+                    "message": f"Ошибка при сохранении данных: {str(e)}",
+                }
+            },
         )
-        raise HTTPException(status_code=500, detail=error_detail)
 
 
 @router.post("/analyze", response_model=TextAnalysisResponse, tags=["analysis"])
@@ -198,7 +211,7 @@ async def batch_analyze(
     )
 
 
-@router.post("/validate", response_model=ValidationResponse, tags=["analysis"])
+@router.post("/validate-session", response_model=ValidationResponse, tags=["analysis"])
 async def validate_session(
     session_id: int = Query(..., description="ID сессии для валидации"),
     session: AsyncSession = Depends(get_session),
@@ -612,6 +625,145 @@ async def update_result(
     await session.commit()
 
     return {"message": "Метка успешно обновлена"}
+
+
+@router.post("/predict", response_model=PredictResponse, tags=["analysis"])
+async def predict_csv(file: UploadFile) -> PredictResponse:
+    try:
+        data = await csv_service.parse_csv(file, require_label=False)
+
+        texts = [row["text"] for row in data]
+        preprocessed_texts = [
+            text_preprocessing_service.normalize(text) for text in texts
+        ]
+        predictions = ml_service.predict_batch_with_proba(preprocessed_texts)
+
+        results: list[dict[str, Any]] = []
+        for row, (label, proba) in zip(data, predictions):
+            result: dict[str, Any] = {
+                "text": row["text"],
+                "pred_label": label,
+            }
+            if "src" in row:
+                result["src"] = row["src"]
+            result["pred_proba"] = proba
+            results.append(result)
+
+        prediction_id = storage_service.save_predictions(results)
+
+        return PredictResponse(
+            status="ok",
+            rows=len(results),
+            download_url=f"/api/download/predicted/{prediction_id}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "PREDICTION_FAILED",
+                    "message": f"Ошибка предсказания: {str(e)}",
+                }
+            },
+        )
+
+
+@router.post("/validate", response_model=ValidationResponse, tags=["analysis"])
+async def validate_csv(file: UploadFile) -> ValidationResponse:
+    try:
+        data = await csv_service.parse_csv(file, require_label=True)
+
+        texts = [row["text"] for row in data]
+        preprocessed_texts = [
+            text_preprocessing_service.normalize(text) for text in texts
+        ]
+        predictions = ml_service.predict_batch(preprocessed_texts)
+
+        y_true: list[int] = []
+        y_pred: list[int] = []
+
+        for row, (pred_label, _) in zip(data, predictions):
+            if "label" in row:
+                y_true.append(row["label"])
+                y_pred.append(pred_label)
+
+        if len(y_true) != len(y_pred):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {
+                        "code": "INVALID_LENGTH",
+                        "message": "Несоответствие длин y_true и y_pred",
+                    }
+                },
+            )
+
+        metrics = metrics_service.calculate_macro_f1(y_true, y_pred)
+
+        return ValidationResponse(
+            macro_f1=metrics["macro_f1"],
+            class_metrics=[ClassMetrics(**cm) for cm in metrics["class_metrics"]],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "F1_CALCULATION_ERROR",
+                    "message": f"Ошибка расчета F1: {str(e)}",
+                }
+            },
+        )
+
+
+@router.get("/download/predicted/{prediction_id}", tags=["analysis"])
+async def download_predictions(
+    prediction_id: str = Path(..., description="ID предсказания"),
+) -> Response:
+    csv_content = storage_service.get_csv(prediction_id, include_proba=True)
+    if csv_content is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Предсказание с ID {prediction_id} не найдено",
+                }
+            },
+        )
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="predictions_{prediction_id}.csv"'
+        },
+    )
+
+
+@router.post("/preprocess", response_model=PreprocessResponse, tags=["analysis"])
+async def preprocess_text(request: PreprocessRequest) -> PreprocessResponse:
+    result = text_preprocessing_service.preprocess(request.text)
+    return PreprocessResponse(
+        original=result["original"],
+        normalized=result["normalized"],
+        tokens=result["tokens"],
+        lemmas=result["lemmas"],
+        entities=result["entities"],
+    )
+
+
+@router.get("/model/status", response_model=ModelStatusResponse, tags=["model"])
+async def model_status() -> ModelStatusResponse:
+    return ModelStatusResponse(
+        model_version=ml_service.model_version,
+        status="ready" if ml_service._is_loaded else "not_loaded",
+        last_updated=datetime.utcnow().isoformat(),
+        implementation="open-source model required (stub)",
+    )
 
 
 api_router: APIRouter = APIRouter()
