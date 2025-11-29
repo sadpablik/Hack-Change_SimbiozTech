@@ -54,6 +54,19 @@ alembic/versions_backup/
 frontend/node_modules/
 frontend/dist/
 
+# ML модели
+ml/models/
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.pb
+*.onnx
+*.bin
+*.safetensors
+models/
+*.model
+
 # Docker
 **/docker-compose.override.yml
 **/.docker/
