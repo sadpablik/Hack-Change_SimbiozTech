@@ -70,3 +70,6 @@ models/
 # Docker
 **/docker-compose.override.yml
 **/.docker/
+
+ml/data/
+*.csv
