@@ -67,13 +67,13 @@ class StorageService:
                     created_at = file_info.get("last_modified", datetime.utcnow().isoformat())
             else:
                 created_at = file_info.get("last_modified", datetime.utcnow().isoformat())
-                if file_info.get("size", 0) > 0:
-                    csv_content = minio_service.get_file(object_name)
-                    if csv_content:
-                        lines = csv_content.decode("utf-8").split("\n")
-                        rows_count = max(
-                            0, len([line for line in lines if line.strip()]) - 1
-                        )
+            if file_info.get("size", 0) > 0:
+                csv_content = minio_service.get_file(object_name)
+                if csv_content:
+                    lines = csv_content.decode("utf-8").split("\n")
+                    rows_count = max(
+                        0, len([line for line in lines if line.strip()]) - 1
+                    )
             
             result.append(
                 {

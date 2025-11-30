@@ -28,7 +28,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 600000,
+      timeout: 1800000,
     });
 
     this.client.interceptors.response.use(
@@ -136,6 +136,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 1800000,
         signal,
       }
     );
@@ -150,13 +151,16 @@ class ApiClient {
     
     try {
       const response = await this.client.post<ValidationResponse>(
-        `/api/validate?enable_preprocessing=${enablePreprocessing}`,
+        `/api/validate`,
         formData,
         {
+          params: {
+            enable_preprocessing: enablePreprocessing,
+          },
           headers: {
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 600000,
+          timeout: 1800000,
           signal,
         }
       );

@@ -42,7 +42,7 @@ export function ValidationPage() {
     setConfusionMatrix(null);
 
     try {
-      const response = await apiClient.validateCSV(selectedFile, abortControllerRef.current?.signal);
+      const response = await apiClient.validateCSV(selectedFile, true, abortControllerRef.current?.signal);
       if (abortControllerRef.current?.signal.aborted) {
         return;
       }

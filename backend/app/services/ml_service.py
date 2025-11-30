@@ -2,8 +2,8 @@ import asyncio
 import httpx
 from app.core.config import settings
 
-MAX_RETRIES = 3
-RETRY_DELAY = 2.0
+MAX_RETRIES = 5
+RETRY_DELAY = 3.0
 
 def get_optimal_batch_size(total_texts: int) -> int:
     if total_texts <= 200:
@@ -57,16 +57,16 @@ async def analyze_single_text(text: str) -> dict:
 
 async def _process_batch(client: httpx.AsyncClient, texts_batch: list[str], batch_num: int = 0) -> list[dict]:
     batch_size = len(texts_batch)
-    timeout_seconds = max(60.0, batch_size * 0.2)
+    timeout_seconds = max(300.0, batch_size * 0.5)
     
     for attempt in range(MAX_RETRIES):
         try:
             timeout = httpx.Timeout(
                 timeout_seconds, 
-                connect=60.0,
+                connect=120.0,
                 read=timeout_seconds, 
-                write=60.0, 
-                pool=30.0
+                write=120.0, 
+                pool=60.0
             )
             response = await client.post(
                 f"{settings.ml_service_url}/predict-batch",
@@ -108,7 +108,7 @@ async def analyze_batch_texts(texts: list) -> list:
     logger.info(f"[ML_SERVICE] Processing {total_texts} texts with batch_size={batch_size}, max_concurrent={max_concurrent}")
     
     if total_texts <= batch_size:
-        timeout = httpx.Timeout(600.0, connect=30.0, read=600.0, write=30.0, pool=10.0)
+        timeout = httpx.Timeout(1800.0, connect=120.0, read=1800.0, write=120.0, pool=60.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             result = await _process_batch(client, texts)
             elapsed = time.time() - start_time
@@ -124,8 +124,8 @@ async def analyze_batch_texts(texts: list) -> list:
         async with semaphore:
             return await _process_batch(client, batch, batch_num)
     
-    max_timeout = max(3600.0, total_texts * 0.1)
-    timeout = httpx.Timeout(max_timeout, connect=120.0, read=max_timeout, write=120.0, pool=100.0)
+    max_timeout = max(7200.0, total_texts * 0.3)
+    timeout = httpx.Timeout(max_timeout, connect=180.0, read=max_timeout, write=180.0, pool=120.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         tasks = [process_with_semaphore(client, batch, i) for i, batch in enumerate(batches)]
         results = await asyncio.gather(*tasks, return_exceptions=True)

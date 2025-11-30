@@ -101,4 +101,10 @@ async def predict_batch_endpoint(request: BatchTextRequest):
 
 if __name__ == "__main__":
     port = int(os.getenv("ML_SERVICE_PORT", "8001"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port,
+        timeout_keep_alive=300,
+        timeout_graceful_shutdown=30
+    )
