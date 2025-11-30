@@ -1,12 +1,10 @@
-// TypeScript типы на основе API схем бэкенда
-
 export interface TextAnalysisRequest {
   text: string;
 }
 
 export interface TextAnalysisResponse {
-  label: number; // 0, 1, or 2
-  confidence: number; // 0.0-1.0
+  label: number;
+  confidence: number;
 }
 
 export interface CSVUploadResponse {
@@ -21,7 +19,7 @@ export interface BatchAnalysisResponse {
 }
 
 export interface ClassMetrics {
-  class_label: number; // 0, 1, or 2
+  class_label: number;
   precision: number;
   recall: number;
   f1: number;
@@ -44,7 +42,7 @@ export interface ValidationItem {
 export interface SessionInfo {
   id: number;
   filename: string;
-  created_at: string; // ISO format
+  created_at: string;
   texts_count: number;
   avg_confidence: number | null;
 }
@@ -65,7 +63,7 @@ export interface SessionStatsResponse {
   avg_confidence: number | null;
   min_confidence: number | null;
   max_confidence: number | null;
-  class_distribution: Record<number, number>; // {0: count, 1: count, 2: count}
+  class_distribution: Record<number, number>;
   source_distribution: Record<string, number> | null;
 }
 
@@ -98,11 +96,11 @@ export interface ResultsFilters {
 export interface CSVRow {
   text: string;
   source?: string;
-  label?: number; // true_label
+  label?: number;
 }
 
 export interface ConfusionMatrix {
-  [key: string]: number; // "0-0", "0-1", "0-2", "1-0", etc.
+  [key: string]: number;
 }
 
 export interface PredictResponse {

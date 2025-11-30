@@ -1,16 +1,13 @@
-"""ML API сервис для анализа тональности текста."""
-
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
 import uvicorn
 import logging
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Импорт функций предсказания (модель загрузится при импорте)
 try:
     from inference import predict, predict_batch
     logger.info("ML model loaded successfully")
@@ -26,17 +23,14 @@ app = FastAPI(
 
 
 class TextRequest(BaseModel):
-    """Запрос для анализа одного текста."""
     text: str
 
 
 class BatchTextRequest(BaseModel):
-    """Запрос для анализа нескольких текстов."""
     texts: List[str]
 
 
 class PredictionResponse(BaseModel):
-    """Ответ с результатом предсказания."""
     label: int
     label_name: str
     confidence: float
@@ -44,15 +38,12 @@ class PredictionResponse(BaseModel):
 
 
 class BatchPredictionResponse(BaseModel):
-    """Ответ с результатами батч-предсказаний."""
     results: List[PredictionResponse]
 
 
 @app.get("/health")
 async def health_check():
-    """Проверка здоровья сервиса."""
     try:
-        # Проверяем, что модель работает, делая тестовое предсказание
         test_result = predict("Тест")
         return {
             "status": "ok",
@@ -71,7 +62,6 @@ async def health_check():
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_single(request: TextRequest):
-    """Предсказание тональности для одного текста."""
     try:
         result = predict(request.text)
         return PredictionResponse(
@@ -86,7 +76,6 @@ async def predict_single(request: TextRequest):
 
 @app.post("/predict-batch", response_model=BatchPredictionResponse)
 async def predict_batch_endpoint(request: BatchTextRequest):
-    """Предсказание тональности для нескольких текстов."""
     try:
         import time
         start_time = time.time()
@@ -111,5 +100,5 @@ async def predict_batch_endpoint(request: BatchTextRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8001)
-
+    port = int(os.getenv("ML_SERVICE_PORT", "8001"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

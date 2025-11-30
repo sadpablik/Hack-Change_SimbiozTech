@@ -37,13 +37,12 @@ export function ResultsTable({
       const response = await apiClient.getResults(sessionId, {
         ...filters,
         offset: currentPage * pageSize,
-        limit: Math.min(pageSize, 500), // Ограничиваем максимум 500
+        limit: Math.min(pageSize, 500),
       });
       setResults(response.results);
       setTotal(response.total);
     } catch (error) {
       console.error('Ошибка загрузки результатов:', error);
-      // Показываем понятное сообщение об ошибке
       if (error instanceof Error) {
         alert(`Ошибка загрузки результатов: ${error.message}`);
       }
@@ -122,7 +121,6 @@ export function ResultsTable({
             </table>
           </div>
 
-          {/* Пагинация */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-700 dark:text-gray-300">

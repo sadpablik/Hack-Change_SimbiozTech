@@ -1,8 +1,7 @@
-"""API эндпоинты для анализа тональности."""
-
 from typing import Any
 from datetime import datetime
 
+from app.core.config import settings
 from app.core.db import get_session
 from app.models.analysis import AnalysisSession, TextAnalysis
 from app.schemas.analysis import (
@@ -29,7 +28,6 @@ router: APIRouter = APIRouter()
 
 
 async def get_session_or_404(session: AsyncSession, session_id: int) -> AnalysisSession:
-    """Получает сессию анализа по ID или выбрасывает 404."""
     result = await session.execute(
         select(AnalysisSession).where(AnalysisSession.id == session_id)
     )
@@ -45,7 +43,6 @@ async def get_session_or_404(session: AsyncSession, session_id: int) -> Analysis
 async def health_check(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    """Проверяет доступность API и подключения к базе данных."""
     await session.execute(text("SELECT 1"))
     return {"status": "ok", "database": "up"}
 
@@ -54,7 +51,6 @@ async def health_check(
 async def analyze_text(
     request: TextAnalysisRequest,
 ) -> TextAnalysisResponse:
-    """Анализирует тональность одного текста."""
     result = await analyze_single_text(request.text)
     return TextAnalysisResponse(
         label=result['label'],
@@ -67,7 +63,6 @@ async def batch_analyze(
     session_id: int = Query(..., description="Session ID"),
     session: AsyncSession = Depends(get_session),
 ) -> BatchAnalysisResponse:
-    """Выполняет батч-обработку всех текстов из загруженного CSV."""
     await get_session_or_404(session, session_id)
 
     result = await session.execute(
@@ -99,7 +94,6 @@ async def validate_csv(
     enable_preprocessing: bool = Query(True, description="Enable text preprocessing"),
     session: AsyncSession = Depends(get_session),
 ) -> ValidationResponse:
-    """Валидирует CSV файл с метками или сессию и рассчитывает метрики."""
     import time
     start_time = time.time()
     
@@ -166,22 +160,45 @@ async def validate_csv(
         texts.append(record["text"])
         true_labels.append(record["label"])
     
-    if enable_preprocessing:
-        preprocessed = text_preprocessing_service.preprocess_batch(texts)
-        texts = [item["normalized"] for item in preprocessed]
+    if len(texts) > settings.max_batch_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Размер батча превышает максимальный ({settings.max_batch_size} строк)"
+        )
     
     import logging
     import sys
     logger = logging.getLogger(__name__)
     print(f"[VALIDATE] Starting validation for {len(texts)} texts", file=sys.stderr, flush=True)
-    logger.info(f"Starting validation for {len(texts)} texts")
+    print(f"[VALIDATE] Enable preprocessing: {enable_preprocessing}", file=sys.stderr, flush=True)
+    logger.info(f"Starting validation for {len(texts)} texts, preprocessing={enable_preprocessing}")
+    
+    if enable_preprocessing:
+        preprocessed = text_preprocessing_service.preprocess_batch(texts)
+        if len(preprocessed) != len(texts):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Preprocessing changed data length: {len(texts)} -> {len(preprocessed)}"
+            )
+        texts = [item["normalized"] for item in preprocessed]
+        print(f"[VALIDATE] Texts preprocessed, length: {len(texts)}", file=sys.stderr, flush=True)
     
     try:
-        print(f"[VALIDATE] Calling analyze_batch_texts...", file=sys.stderr, flush=True)
+        print(f"[VALIDATE] Calling analyze_batch_texts for {len(texts)} texts...", file=sys.stderr, flush=True)
+        print(f"[VALIDATE] True labels: {true_labels}", file=sys.stderr, flush=True)
+        print(f"[VALIDATE] Number of texts: {len(texts)}, Number of labels: {len(true_labels)}", file=sys.stderr, flush=True)
         predictions = await analyze_batch_texts(texts)
         pred_labels = [pred['label'] for pred in predictions]
+        print(f"[VALIDATE] Predicted labels: {pred_labels}", file=sys.stderr, flush=True)
+        print(f"[VALIDATE] Number of predictions: {len(pred_labels)}", file=sys.stderr, flush=True)
         print(f"[VALIDATE] Predictions completed, calculating metrics", file=sys.stderr, flush=True)
         logger.info(f"Predictions completed, calculating metrics")
+        
+        if len(true_labels) != len(pred_labels):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Label count mismatch: true_labels={len(true_labels)}, pred_labels={len(pred_labels)}"
+            )
         
         metrics: dict[str, Any] = metrics_service.calculate_macro_f1(true_labels, pred_labels)
         print(f"[VALIDATE] Metrics calculated: macro_f1={metrics['macro_f1']}", file=sys.stderr, flush=True)
@@ -221,7 +238,6 @@ async def validate_session(
     session_id: int = Query(..., description="Session ID for validation"),
     session: AsyncSession = Depends(get_session),
 ) -> ValidationResponse:
-    """Рассчитывает macro-F1 метрику для сессии."""
     await get_session_or_404(session, session_id)
 
     result = await session.execute(
@@ -258,7 +274,6 @@ async def upload_csv(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
 ) -> CSVUploadResponse:
-    """Загружает CSV файл и создает сессию анализа."""
     data, skipped_rows = await csv_service.parse_csv(file, require_label=False)
     
     if not data:
@@ -295,7 +310,6 @@ async def predict_csv(
     enable_preprocessing: bool = Query(True, description="Enable text preprocessing"),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Обрабатывает CSV файл и возвращает результаты предсказания."""
     import time
     start_time = time.time()
     
@@ -313,15 +327,18 @@ async def predict_csv(
     
     texts = [record["text"] for record in data]
     
-    # Оптимизация: предобработка только если включена
+    if len(texts) > settings.max_batch_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Размер батча превышает максимальный ({settings.max_batch_size} строк)"
+        )
+    
     if enable_preprocessing:
         preprocessed = text_preprocessing_service.preprocess_batch(texts)
         texts = [item["normalized"] for item in preprocessed]
-    # Если предобработка отключена, используем тексты как есть
     
     predictions = await analyze_batch_texts(texts)
     
-    # Оптимизация для больших файлов: сохраняем в БД чанками по 1000 записей
     chunk_size = 1000
     text_analyses = [
         TextAnalysis(
@@ -335,13 +352,12 @@ async def predict_csv(
         for record, pred_result in zip(data, predictions)
     ]
     
-    # Сохраняем чанками для больших файлов
     for i in range(0, len(text_analyses), chunk_size):
         chunk = text_analyses[i:i + chunk_size]
         session.add_all(chunk)
-        await session.flush()  # Flush вместо commit для каждого чанка
+        await session.flush()
     
-    await session.commit()  # Финальный commit
+    await session.commit()
     
     predictions_data = []
     for record, pred_result in zip(data, predictions):
@@ -351,25 +367,19 @@ async def predict_csv(
             "pred_label": pred_result['label'],
         }
         
-        # Добавляем pred_proba только если probabilities доступны и не пустые
         if 'probabilities' in pred_result and pred_result['probabilities']:
             try:
                 probs = pred_result['probabilities']
-                # Проверяем, что probabilities - это словарь с нужными ключами
                 if isinstance(probs, dict):
-                    # Проверяем наличие всех трех ключей
                     if all(key in probs for key in ['нейтральная', 'положительная', 'негативная']):
-                        # Извлекаем вероятности в правильном порядке: [0, 1, 2]
                         prob_list = [
                             float(probs.get('нейтральная', 0.0)),
                             float(probs.get('положительная', 0.0)),
                             float(probs.get('негативная', 0.0))
                         ]
-                        # Проверяем, что хотя бы одна вероятность не равна нулю
                         if any(p > 0.0 for p in prob_list):
                             data_item["pred_proba"] = prob_list
             except (KeyError, TypeError, AttributeError, ValueError) as e:
-                # Если probabilities в неправильном формате, не добавляем pred_proba
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Could not extract probabilities: {e}, pred_result keys: {list(pred_result.keys())}")
@@ -395,7 +405,6 @@ async def get_sessions(
     offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Получает список сессий."""
     total_result = await session.execute(
         select(func.count(AnalysisSession.id))
     )
@@ -434,7 +443,6 @@ async def get_session_results(
     search: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Получает результаты анализа для сессии."""
     await get_session_or_404(session, session_id)
     
     query = select(TextAnalysis).where(TextAnalysis.session_id == session_id)
@@ -479,7 +487,6 @@ async def get_session_stats(
     session_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Получает статистику по сессии."""
     await get_session_or_404(session, session_id)
     
     result = await session.execute(
@@ -514,7 +521,6 @@ async def get_session_stats(
 
 @router.get("/predictions/list", tags=["predictions"])
 async def list_predictions() -> dict[str, Any]:
-    """Список всех предсказаний."""
     predictions = storage_service.list_predictions()
     return {
         "predictions": predictions,
@@ -524,7 +530,6 @@ async def list_predictions() -> dict[str, Any]:
 
 @router.get("/validations/list", tags=["validations"])
 async def list_validations() -> dict[str, Any]:
-    """Список всех валидаций."""
     validations = storage_service.list_validations()
     return {
         "validations": validations,
@@ -534,7 +539,6 @@ async def list_validations() -> dict[str, Any]:
 
 @router.get("/download/predicted/{prediction_id}", tags=["download"])
 async def download_prediction(prediction_id: str) -> Response:
-    """Скачивает файл с предсказаниями."""
     csv_content = storage_service.get_csv(prediction_id, include_proba=True)
     if not csv_content:
         raise HTTPException(status_code=404, detail="Prediction not found")
@@ -548,7 +552,6 @@ async def download_prediction(prediction_id: str) -> Response:
 
 @router.get("/download/validation/{validation_id}", tags=["download"])
 async def download_validation(validation_id: str) -> Response:
-    """Скачивает файл с результатами валидации."""
     validation_data = storage_service.get_validation(validation_id)
     if not validation_data:
         raise HTTPException(status_code=404, detail="Validation not found")
@@ -568,7 +571,6 @@ async def export_csv(
     session_id: int = Query(..., description="Session ID"),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    """Экспортирует результаты сессии в CSV."""
     await get_session_or_404(session, session_id)
     
     result = await session.execute(
@@ -595,7 +597,6 @@ async def export_json(
     session_id: int = Query(..., description="Session ID"),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Экспортирует результаты сессии в JSON."""
     await get_session_or_404(session, session_id)
     
     result = await session.execute(
@@ -623,7 +624,6 @@ async def update_result(
     true_label: int = Query(..., ge=0, le=2, description="True label"),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    """Обновляет true_label для результата."""
     result = await session.execute(
         select(TextAnalysis).where(TextAnalysis.id == result_id)
     )

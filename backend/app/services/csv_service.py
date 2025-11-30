@@ -1,12 +1,10 @@
-"""Сервис для работы с CSV файлами согласно ТЗ."""
-
 import io
 from typing import Any
 
 import pandas as pd
 from fastapi import HTTPException, UploadFile
 
-MAX_FILE_SIZE: int = 500 * 1024 * 1024
+from app.core.config import settings
 
 
 class CSVValidationError(Exception):
@@ -21,7 +19,6 @@ class CSVService:
     REQUIRED_COLUMN: str = "text"
     OPTIONAL_COLUMNS: set[str] = {"src", "label"}
     VALID_LABELS: set[int] = {0, 1, 2}
-    MAX_TEXT_LENGTH: int = 10000
 
     @staticmethod
     def _detect_delimiter(content: bytes) -> str:
@@ -54,13 +51,13 @@ class CSVService:
         try:
             contents: bytes = await file.read()
 
-            if len(contents) > MAX_FILE_SIZE:
+            if len(contents) > settings.max_file_size_bytes:
                 raise HTTPException(
                     status_code=400,
                     detail={
                         "error": {
                             "code": "INVALID_CSV",
-                            "message": f"Размер файла превышает максимальный ({MAX_FILE_SIZE / 1024 / 1024}MB)",
+                            "message": f"Размер файла превышает максимальный ({settings.max_file_size_mb}MB)",
                         }
                     },
                 )
@@ -167,13 +164,13 @@ class CSVService:
 
                 text_value = str(text_value) if not pd.isna(text_value) else ""
 
-                if len(text_value) > CSVService.MAX_TEXT_LENGTH:
+                if len(text_value) > settings.max_text_length:
                     raise HTTPException(
                         status_code=400,
                         detail={
                             "error": {
                                 "code": "INVALID_CSV",
-                                "message": f"Строка {row_num}: текст превышает максимальную длину ({CSVService.MAX_TEXT_LENGTH} символов)",
+                                "message": f"Строка {row_num}: текст превышает максимальную длину ({settings.max_text_length} символов)",
                                 "row": row_num,
                             }
                         },

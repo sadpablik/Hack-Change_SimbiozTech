@@ -29,10 +29,8 @@ class TextPreprocessingService:
 
     @staticmethod
     def preprocess_batch(texts: list[str]) -> list[dict[str, Any]]:
-        """Оптимизированная батч-обработка с использованием list comprehension."""
         if not texts:
             return []
-        # Оптимизация: нормализуем все тексты сразу через list comprehension
         normalized_texts = [re.sub(r"\s+", " ", text).strip() if text and isinstance(text, str) else "" for text in texts]
         return [
             {

@@ -1,5 +1,3 @@
-"""Сервис для хранения предсказаний в MinIO."""
-
 import json
 import uuid
 from datetime import datetime
@@ -12,9 +10,7 @@ from app.services.minio_service import minio_service
 class StorageService:
     @classmethod
     def save_predictions(cls, predictions: list[dict[str, Any]], processing_time: float | None = None) -> str:
-        """Сохраняет предсказания в MinIO и возвращает prediction_id."""
         prediction_id = str(uuid.uuid4())
-        # Оптимизация: для больших файлов используем streaming запись
         csv_content = csv_service.export_to_csv(predictions, include_proba=True)
         object_name = f"predictions/{prediction_id}.csv"
         minio_service.save_file(object_name, csv_content)
@@ -37,12 +33,10 @@ class StorageService:
 
     @classmethod
     def get_predictions(cls, prediction_id: str) -> list[dict[str, Any]] | None:
-        """Получает предсказания из MinIO (не используется, оставлено для совместимости)."""
         return None
 
     @classmethod
     def get_csv(cls, prediction_id: str, include_proba: bool = False) -> str | None:
-        """Получает CSV файл из MinIO."""
         object_name = f"predictions/{prediction_id}.csv"
         content = minio_service.get_file(object_name)
         if content is None:
@@ -51,7 +45,6 @@ class StorageService:
 
     @classmethod
     def list_predictions(cls) -> list[dict[str, Any]]:
-        """Возвращает список всех предсказаний с метаданными из MinIO."""
         files = minio_service.list_files(prefix="predictions/")
         result = []
         for file_info in files:
@@ -94,7 +87,6 @@ class StorageService:
 
     @classmethod
     def save_validation(cls, validation_data: dict[str, Any]) -> str:
-        """Сохраняет результаты валидации в MinIO и возвращает validation_id."""
         validation_id = str(uuid.uuid4())
         json_content = json.dumps(validation_data, ensure_ascii=False, indent=2)
         object_name = f"validations/{validation_id}.json"
@@ -104,12 +96,10 @@ class StorageService:
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Error saving validation to MinIO: {str(e)}", exc_info=True)
-            # Продолжаем работу даже если не удалось сохранить в MinIO
         return validation_id
 
     @classmethod
     def get_validation(cls, validation_id: str) -> dict[str, Any] | None:
-        """Получает результаты валидации из MinIO."""
         object_name = f"validations/{validation_id}.json"
         content = minio_service.get_file(object_name)
         if content is None:
@@ -121,7 +111,6 @@ class StorageService:
 
     @classmethod
     def list_validations(cls) -> list[dict[str, Any]]:
-        """Возвращает список всех валидаций с метаданными из MinIO."""
         files = minio_service.list_files(prefix="validations/")
         result = []
         for file_info in files:
@@ -149,7 +138,6 @@ class StorageService:
 
     @classmethod
     def cleanup_old(cls, max_age_hours: int = 24) -> None:
-        """Удаляет старые файлы из MinIO."""
         files = minio_service.list_files(prefix="predictions/")
         validation_files = minio_service.list_files(prefix="validations/")
         now = datetime.utcnow()

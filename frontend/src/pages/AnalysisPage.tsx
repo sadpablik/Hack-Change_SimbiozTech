@@ -32,7 +32,6 @@ export function AnalysisPage() {
 
     setIsLoading(true);
     try {
-      // Используем максимальный допустимый limit (500)
       const response = await apiClient.getResults(Number(sessionId), { limit: 500, offset: 0 });
       const uniqueSources = Array.from(
         new Set(response.results.map((r) => r.source).filter((s): s is string => s !== null))

@@ -1,5 +1,3 @@
-"""Сервис для работы с MinIO объектным хранилищем."""
-
 import io
 from typing import Any
 
@@ -14,7 +12,6 @@ class MinIOService:
 
     @classmethod
     def _get_client(cls) -> Minio:
-        """Получает клиент MinIO."""
         if cls._client is None:
             try:
                 cls._client = Minio(
@@ -32,7 +29,6 @@ class MinIOService:
 
     @classmethod
     def _ensure_bucket(cls) -> None:
-        """Создает bucket если его нет."""
         try:
             if not cls._client.bucket_exists(cls._bucket_name):
                 cls._client.make_bucket(cls._bucket_name)
@@ -46,17 +42,6 @@ class MinIOService:
     def save_file(
         cls, object_name: str, content: str | bytes, content_type: str | None = None
     ) -> str:
-        """
-        Сохраняет файл в MinIO.
-
-        Args:
-            object_name: Имя объекта в bucket
-            content: Содержимое файла (строка или bytes)
-            content_type: MIME тип файла (автоопределяется по расширению если не указан)
-
-        Returns:
-            str: Имя объекта
-        """
         client = cls._get_client()
         if isinstance(content, str):
             content_bytes = content.encode("utf-8")
@@ -88,15 +73,6 @@ class MinIOService:
 
     @classmethod
     def get_file(cls, object_name: str) -> bytes | None:
-        """
-        Получает файл из MinIO.
-
-        Args:
-            object_name: Имя объекта
-
-        Returns:
-            bytes | None: Содержимое файла или None если не найден
-        """
         try:
             client = cls._get_client()
             response = client.get_object(cls._bucket_name, object_name)
@@ -109,15 +85,6 @@ class MinIOService:
 
     @classmethod
     def delete_file(cls, object_name: str) -> bool:
-        """
-        Удаляет файл из MinIO.
-
-        Args:
-            object_name: Имя объекта
-
-        Returns:
-            bool: True если удален, False если не найден
-        """
         try:
             client = cls._get_client()
             client.remove_object(cls._bucket_name, object_name)
@@ -127,15 +94,6 @@ class MinIOService:
 
     @classmethod
     def list_files(cls, prefix: str = "") -> list[dict[str, Any]]:
-        """
-        Список файлов в bucket.
-
-        Args:
-            prefix: Префикс для фильтрации
-
-        Returns:
-            list: Список объектов с метаданными
-        """
         try:
             client = cls._get_client()
             objects = client.list_objects(

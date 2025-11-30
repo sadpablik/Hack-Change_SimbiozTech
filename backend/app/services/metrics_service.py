@@ -1,5 +1,3 @@
-"""Сервис для расчета метрик качества модели."""
-
 from typing import Any
 
 import numpy as np
@@ -7,14 +5,11 @@ from sklearn.metrics import f1_score, precision_recall_fscore_support
 
 
 class MetricsService:
-    """Сервис для расчета метрик качества."""
-
     CLASS_LABELS: list[int] = [0, 1, 2]
     DECIMAL_PLACES: int = 4
 
     @staticmethod
     def calculate_macro_f1(y_true: list[int], y_pred: list[int]) -> dict[str, Any]:
-        """Рассчитывает macro-F1 и метрики по классам."""
         y_true_array: np.ndarray = np.array(y_true)
         y_pred_array: np.ndarray = np.array(y_pred)
 

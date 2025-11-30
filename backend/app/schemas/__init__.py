@@ -1,5 +1,3 @@
-"""Pydantic-схемы запросов и ответов."""
-
 from app.schemas.analysis import (
     BatchAnalysisResponse,
     ClassMetrics,

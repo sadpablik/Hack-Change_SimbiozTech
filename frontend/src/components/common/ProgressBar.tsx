@@ -1,5 +1,5 @@
 interface ProgressBarProps {
-  progress: number; // 0-100
+  progress: number;
   label?: string;
   className?: string;
 }

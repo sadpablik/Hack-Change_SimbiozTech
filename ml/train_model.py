@@ -112,7 +112,6 @@ tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
 
 
 def tokenize_function(texts, labels):
-    """Text tokenization with truncation and padding"""
     encodings = tokenizer(
         texts,
         truncation=True,
@@ -169,7 +168,6 @@ training_args = TrainingArguments(
 
 
 def compute_metrics(eval_pred):
-    """Compute F1, Accuracy, Precision, Recall metrics"""
     predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=1)
 

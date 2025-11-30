@@ -189,7 +189,7 @@ export function ResultsPage() {
   }, [handleCopyToClipboard, handleDownload, navigate]);
 
   const uniqueSources = Array.from(new Set(data.filter(row => row.src).map(row => row.src!))).sort();
-  
+
   const filteredData = data.filter(row => {
     if (filter !== null && row.pred_label !== filter) return false;
     if (sourceFilter && row.src !== sourceFilter) return false;
@@ -356,9 +356,9 @@ export function ResultsPage() {
 
       {data.length > 0 && (
         <>
-          <div className="card mb-6">
-            <ClassDistribution data={data} />
-          </div>
+        <div className="card mb-6">
+          <ClassDistribution data={data} />
+        </div>
           
           <div className="card mb-6">
             <TopWords data={data} topN={20} />

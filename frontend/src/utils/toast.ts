@@ -1,5 +1,3 @@
-// Простая система toast уведомлений
-
 type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 interface Toast {

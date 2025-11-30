@@ -144,7 +144,7 @@ export function HomePage() {
       setError(err instanceof Error ? err.message : 'Ошибка при обработке файла');
     } finally {
       if (!abortControllerRef.current?.signal.aborted) {
-        setIsProcessing(false);
+      setIsProcessing(false);
       }
     }
   };
@@ -308,7 +308,7 @@ export function HomePage() {
             <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
               <span>Идёт обработка...</span>
               <div className="flex items-center space-x-3">
-                <span>{progress}%</span>
+              <span>{progress}%</span>
                 <button
                   onClick={handleCancel}
                   className="px-4 py-1.5 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
@@ -340,7 +340,7 @@ export function HomePage() {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Обработано строк</p>
                   <p className="text-5xl font-bold gradient-text">
                     {predictionResult.rows}
-                  </p>
+                </p>
                   {predictionResult.processing_time && (
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
                       ⏱️ Время обработки: {predictionResult.processing_time} сек
@@ -349,10 +349,10 @@ export function HomePage() {
                 </div>
               </div>
               <div className="flex items-center justify-center gap-3">
-                <button
-                  onClick={handleDownload}
-                  className="btn-primary"
-                >
+              <button
+                onClick={handleDownload}
+                className="btn-primary"
+              >
                   💾 Скачать CSV
                 </button>
                 <button
@@ -363,7 +363,7 @@ export function HomePage() {
                   className="btn-primary bg-blue-600 hover:bg-blue-700"
                 >
                   📊 Просмотреть результаты
-                </button>
+              </button>
               </div>
             </div>
           </div>

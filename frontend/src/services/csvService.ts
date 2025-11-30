@@ -21,7 +21,6 @@ export async function parseCSV(file: File): Promise<ParsedCSV> {
           return;
         }
 
-        // Валидация: проверка наличия колонки 'text'
         const firstRow = results.data[0] as Record<string, any>;
         if (!firstRow || !('text' in firstRow)) {
           reject(new Error("CSV должен содержать колонку 'text'"));

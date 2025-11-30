@@ -99,89 +99,89 @@ export function ClassDistribution({ data }: ClassDistributionProps) {
 
     switch (chartType) {
       case 'bar':
-        return (
-          <ResponsiveContainer width="100%" height={350}>
+  return (
+        <ResponsiveContainer width="100%" height={350}>
             <BarChart {...commonProps}>
-              <defs>
-                {GRADIENT_IDS.map((id, index) => (
-                  <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={COLORS[index]} stopOpacity={0.9} />
-                    <stop offset="100%" stopColor={COLORS[index]} stopOpacity={0.5} />
-                  </linearGradient>
-                ))}
-              </defs>
+            <defs>
+              {GRADIENT_IDS.map((id, index) => (
+                <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLORS[index]} stopOpacity={0.9} />
+                  <stop offset="100%" stopColor={COLORS[index]} stopOpacity={0.5} />
+                </linearGradient>
+              ))}
+            </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.3} className="dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} className="dark:text-gray-400" />
               <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} className="dark:text-gray-400" tickFormatter={(value) => value.toLocaleString('ru-RU')} />
-              <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="value" radius={[8, 8, 0, 0]} animationDuration={1000} animationBegin={0}>
-                {chartData.map((entry, index) => (
+              {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={`url(#${GRADIENT_IDS[entry.label]})`} style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }} />
-                ))}
+              ))}
                 <LabelList dataKey="value" position="top" formatter={(value: number) => value.toLocaleString('ru-RU')} style={{ fill: '#374151', fontSize: '12px', fontWeight: 'bold' }} className="dark:fill-gray-300" />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
         );
       
       case 'pie':
         return (
-          <ResponsiveContainer width="100%" height={350}>
-            <PieChart>
-              <defs>
-                {chartData.map((entry, index) => (
-                  <linearGradient key={`pie-gradient-${index}`} id={`pie-gradient-${index}`} x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor={entry.color} stopOpacity={1} />
-                    <stop offset="100%" stopColor={entry.color} stopOpacity={0.7} />
-                  </linearGradient>
-                ))}
-              </defs>
-              <Pie
-                data={chartData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
+        <ResponsiveContainer width="100%" height={350}>
+          <PieChart>
+            <defs>
+              {chartData.map((entry, index) => (
+                <linearGradient key={`pie-gradient-${index}`} id={`pie-gradient-${index}`} x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor={entry.color} stopOpacity={1} />
+                  <stop offset="100%" stopColor={entry.color} stopOpacity={0.7} />
+                </linearGradient>
+              ))}
+            </defs>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              labelLine={false}
                 label={CustomLabel}
                 outerRadius={110}
                 innerRadius={50}
-                fill="#8884d8"
-                dataKey="value"
-                animationDuration={1000}
-                animationBegin={0}
-              >
-                {chartData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={`url(#pie-gradient-${index})`}
-                    style={{
-                      filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))',
-                      cursor: 'pointer',
-                      transition: 'all 0.3s ease',
-                    }}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
-                        <p className="font-semibold text-gray-900 dark:text-white mb-2">{data.name}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Количество: <span className="font-semibold text-gray-900 dark:text-white">{data.value.toLocaleString('ru-RU')}</span>
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Процент: <span className="font-semibold text-gray-900 dark:text-white">{data.percentage}%</span>
-                        </p>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+              fill="#8884d8"
+              dataKey="value"
+              animationDuration={1000}
+              animationBegin={0}
+            >
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={`url(#pie-gradient-${index})`}
+                  style={{
+                    filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                  }}
+                />
+              ))}
+            </Pie>
+            <Tooltip
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  const data = payload[0].payload;
+                  return (
+                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
+                      <p className="font-semibold text-gray-900 dark:text-white mb-2">{data.name}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Количество: <span className="font-semibold text-gray-900 dark:text-white">{data.value.toLocaleString('ru-RU')}</span>
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Процент: <span className="font-semibold text-gray-900 dark:text-white">{data.percentage}%</span>
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
         );
       
       default:
@@ -208,19 +208,19 @@ export function ClassDistribution({ data }: ClassDistributionProps) {
         </div>
       </div>
       {renderChart()}
-      <div className="mt-4 flex justify-center gap-6 flex-wrap">
-        {chartData.map((item) => (
-          <div key={item.label} className="flex items-center gap-2">
-            <div
-              className="w-4 h-4 rounded"
-              style={{ backgroundColor: item.color }}
-            />
-            <span className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="mt-4 flex justify-center gap-6 flex-wrap">
+          {chartData.map((item) => (
+            <div key={item.label} className="flex items-center gap-2">
+              <div
+                className="w-4 h-4 rounded"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">
               {item.name}: <span className="font-semibold text-gray-900 dark:text-white">{item.value.toLocaleString('ru-RU')} ({item.percentage}%)</span>
-            </span>
-          </div>
-        ))}
-      </div>
+              </span>
+            </div>
+          ))}
+        </div>
       <div className="mt-2 text-center text-sm text-gray-500 dark:text-gray-400">
         Всего: <span className="font-semibold text-gray-700 dark:text-gray-300">{total.toLocaleString('ru-RU')}</span>
       </div>

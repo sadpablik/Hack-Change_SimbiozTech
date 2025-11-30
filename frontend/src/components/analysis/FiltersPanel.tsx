@@ -74,7 +74,6 @@ export function FiltersPanel({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Фильтр по классу */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Класс тональности
@@ -93,7 +92,6 @@ export function FiltersPanel({
           </select>
         </div>
 
-        {/* Фильтр по источнику */}
         {sources.length > 0 && (
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -114,7 +112,6 @@ export function FiltersPanel({
           </div>
         )}
 
-        {/* Поиск по тексту */}
         <div className="md:col-span-2 lg:col-span-1">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Поиск по тексту
@@ -128,7 +125,6 @@ export function FiltersPanel({
           />
         </div>
 
-        {/* Диапазон уверенности */}
         <div className="md:col-span-2 lg:col-span-3">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Уверенность модели

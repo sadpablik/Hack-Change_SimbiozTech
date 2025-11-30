@@ -4,7 +4,6 @@ type Theme = 'light' | 'dark';
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
-    // Проверяем localStorage или системные настройки
     const savedTheme = localStorage.getItem('theme') as Theme | null;
     if (savedTheme) {
       return savedTheme;

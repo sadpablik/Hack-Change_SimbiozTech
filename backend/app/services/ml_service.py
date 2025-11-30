@@ -1,5 +1,3 @@
-"""Сервис для работы с ML моделью через HTTP API."""
-
 import asyncio
 import httpx
 from app.core.config import settings
@@ -8,17 +6,8 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2.0
 
 def get_optimal_batch_size(total_texts: int) -> int:
-    """
-    Определяет оптимальный размер батча для отправки в ML сервис.
-    
-    Важно: ML сервис сам разобьет батч на оптимальные чанки для inference
-    (512 для GPU, 128 для CPU). Здесь мы определяем размер HTTP батча.
-    
-    Для больших файлов используем большие батчи, чтобы минимизировать
-    количество HTTP запросов и сетевые задержки.
-    """
     if total_texts <= 200:
-        return total_texts  # Обрабатываем все сразу
+        return total_texts
     elif total_texts <= 1000:
         return 500
     elif total_texts <= 10000:
@@ -26,26 +15,22 @@ def get_optimal_batch_size(total_texts: int) -> int:
     elif total_texts <= 50000:
         return 5000
     else:
-        # Для 60000 строк: отправляем батчи по 10000
-        # ML сервис разобьет каждый на оптимальные чанки для inference
         return 10000
 
 def get_optimal_concurrency(total_texts: int) -> int:
-    """Определяет оптимальное количество параллельных батчей."""
     if total_texts <= 200:
-        return 1  # Один батч - не нужна параллельность
+        return 1
     elif total_texts <= 1000:
-        return 2  # 2 батча - обрабатываем параллельно
+        return 2
     elif total_texts <= 10000:
-        return 5  # 5 параллельных батчей
+        return 5
     elif total_texts <= 50000:
-        return 8  # 8 параллельных батчей для больших файлов
+        return 8
     else:
-        return 10  # Максимум 10 параллельных батчей для очень больших файлов
+        return 10
 
 
 async def analyze_single_text(text: str) -> dict:
-    """Анализирует тональность одного текста через ML сервис."""
     timeout = httpx.Timeout(30.0, connect=10.0, read=30.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(MAX_RETRIES):
@@ -71,18 +56,14 @@ async def analyze_single_text(text: str) -> dict:
 
 
 async def _process_batch(client: httpx.AsyncClient, texts_batch: list[str], batch_num: int = 0) -> list[dict]:
-    """Обрабатывает один батч текстов с повторными попытками и оптимизированными таймаутами."""
     batch_size = len(texts_batch)
-    # Увеличиваем таймаут для больших батчей: ~0.2 секунды на текст (180ms среднее время), минимум 60 секунд
-    # Для 10000 текстов: 10000 * 0.2 = 2000 секунд = ~33 минуты
     timeout_seconds = max(60.0, batch_size * 0.2)
     
     for attempt in range(MAX_RETRIES):
         try:
-            # Используем более длинные таймауты для больших батчей
             timeout = httpx.Timeout(
                 timeout_seconds, 
-                connect=60.0,  # Увеличен connect timeout
+                connect=60.0,
                 read=timeout_seconds, 
                 write=60.0, 
                 pool=30.0
@@ -112,7 +93,6 @@ async def _process_batch(client: httpx.AsyncClient, texts_batch: list[str], batc
 
 
 async def analyze_batch_texts(texts: list) -> list:
-    """Анализирует тональность нескольких текстов через ML сервис с адаптивным батчингом и максимальной параллельностью."""
     import time
     import logging
     logger = logging.getLogger(__name__)
@@ -134,7 +114,7 @@ async def analyze_batch_texts(texts: list) -> list:
             elapsed = time.time() - start_time
             logger.info(f"[ML_SERVICE] Completed {total_texts} texts in {elapsed:.2f}s ({elapsed/total_texts*1000:.2f}ms per text)")
             return result
-    
+
     batches = [texts[i:i + batch_size] for i in range(0, total_texts, batch_size)]
     num_batches = len(batches)
     
@@ -144,8 +124,7 @@ async def analyze_batch_texts(texts: list) -> list:
         async with semaphore:
             return await _process_batch(client, batch, batch_num)
     
-    # Увеличиваем таймауты для очень больших файлов (до 2 часов)
-    max_timeout = max(3600.0, total_texts * 0.1)  # ~0.1 сек на текст, минимум 1 час
+    max_timeout = max(3600.0, total_texts * 0.1)
     timeout = httpx.Timeout(max_timeout, connect=120.0, read=max_timeout, write=120.0, pool=100.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         tasks = [process_with_semaphore(client, batch, i) for i, batch in enumerate(batches)]
@@ -164,7 +143,4 @@ async def analyze_batch_texts(texts: list) -> list:
 
 
 def get_sentiment_stats(texts: list) -> dict:
-    """Get statistics about sentiments in a batch"""
-    # Эта функция больше не используется напрямую, но оставлена для совместимости
-    # В реальности нужно сделать её async
     raise NotImplementedError("Use analyze_batch_texts instead")

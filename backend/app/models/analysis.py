@@ -1,5 +1,3 @@
-"""SQLAlchemy models for sentiment analysis."""
-
 from datetime import datetime
 
 from app.models.base import Base
@@ -8,8 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class AnalysisSession(Base):
-    """CSV upload session."""
-
     __tablename__ = "analysis_sessions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -24,8 +20,6 @@ class AnalysisSession(Base):
 
 
 class TextAnalysis(Base):
-    """Single text analysis result."""
-
     __tablename__ = "text_analyses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
