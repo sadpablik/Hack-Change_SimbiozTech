@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_NO_CACHE_DIR=off
 
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
 WORKDIR /app
 
 COPY requirements.txt ./
@@ -16,7 +18,10 @@ COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
 
-RUN mkdir -p models
+RUN mkdir -p models && \
+    chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 
